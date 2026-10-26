@@ -1,64 +1,172 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Header from '@/components/layout/Header';
-import {
-  CreditCard,
-  Plus,
-  Search,
-  Filter,
-  CheckCircle,
-  XCircle,
-  AlertTriangle,
-  Building,
-  Calendar,
-  Wallet,
-  ArrowDownLeft,
-  FileText
-} from 'lucide-react';
-import { mockPayments, mockMembers, mockDashboardMetrics } from '@/lib/mockData';
+import { CreditCard, Plus, RefreshCw } from 'lucide-react';
 import RecordPaymentModal from '@/components/payments/RecordPaymentModal';
 import CancelPaymentModal from '@/components/payments/CancelPaymentModal';
-import { Payment } from '@/types/database';
+import ReceiptModal from '@/components/payments/ReceiptModal';
+import { getPayments, PaymentRecord } from '@/lib/data/payments';
+import { DataTable, Column } from '@/components/ui/DataTable';
+import { TableSkeleton } from '@/components/ui/Skeleton';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { StatCard } from '@/components/ui/StatCard';
+import { useToast } from '@/components/common/Toast';
 
 export default function PaymentsPage() {
-  const [payments, setPayments] = useState<Payment[]>(mockPayments);
-  const [searchQuery, setSearchQuery] = useState('');
+  const { showToast } = useToast();
+  const [payments, setPayments] = useState<PaymentRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [methodFilter, setMethodFilter] = useState<string>('all');
   const [isRecordOpen, setIsRecordOpen] = useState(false);
-  const [cancelTarget, setCancelTarget] = useState<Payment | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<PaymentRecord | null>(null);
+  const [receiptTarget, setReceiptTarget] = useState<PaymentRecord | null>(null);
 
-  const filteredPayments = payments.filter((p) => {
-    const mem = mockMembers.find((m) => m.id === p.member_id);
-    const matchesSearch =
-      (mem?.full_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (p.transaction_ref || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (mem?.phone || '').includes(searchQuery);
+  const fetchPaymentsList = useCallback(async () => {
+    setIsLoading(true);
+    const res = await getPayments();
+    if (res.ok) {
+      setPayments(res.value);
+    } else {
+      showToast({ type: 'error', title: 'فشل تحميل المدفوعات: ' + res.error.message });
+    }
+    setIsLoading(false);
+  }, [showToast]);
 
-    const matchesMethod = methodFilter === 'all' ? true : p.method === methodFilter;
+  useEffect(() => {
+    fetchPaymentsList();
+  }, [fetchPaymentsList]);
 
-    return matchesSearch && matchesMethod;
-  });
-
-  const handlePaymentRecorded = (newPayment: Payment) => {
-    setPayments([newPayment, ...payments]);
+  const handlePaymentRecorded = (newPayment: PaymentRecord) => {
+    setPayments((prev) => [newPayment, ...prev]);
   };
 
-  const handlePaymentCancelled = (paymentId: string, reason: string) => {
-    setPayments(
-      payments.map((p) =>
-        p.id === paymentId
-          ? {
-              ...p,
-              status: 'cancelled',
-              cancelled_by: 'usr-admin',
-              cancelled_at: new Date().toISOString(),
-              cancellation_reason: reason,
-            }
-          : p
-      )
+  const handlePaymentCancelled = (updatedPayment: PaymentRecord) => {
+    setPayments((prev) =>
+      prev.map((p) => (p.id === updatedPayment.id ? updatedPayment : p))
     );
   };
+
+  // Real KPI calculations from payments
+  const metrics = useMemo(() => {
+    const valid = payments.filter((p) => p.status === 'completed');
+    const totalRevenue = valid.reduce((acc, p) => acc + p.amount_mru, 0);
+    const bankilyTotal = valid.filter((p) => p.method === 'bankily').reduce((acc, p) => acc + p.amount_mru, 0);
+    const masrviTotal = valid.filter((p) => p.method === 'masrvi').reduce((acc, p) => acc + p.amount_mru, 0);
+    const cashSedadTotal = valid.filter((p) => p.method === 'cash' || p.method === 'sedad').reduce((acc, p) => acc + p.amount_mru, 0);
+
+    return { totalRevenue, bankilyTotal, masrviTotal, cashSedadTotal };
+  }, [payments]);
+
+  const filteredPayments = payments.filter((p) => {
+    if (methodFilter === 'all') return true;
+    return p.method === methodFilter;
+  });
+
+  const columns: Column<PaymentRecord>[] = [
+    {
+      key: 'id',
+      header: 'رقم الوصل',
+      render: (p) => (
+        <span className="font-mono text-xs text-gray-400">
+          {p.id.slice(0, 8)}...
+        </span>
+      ),
+    },
+    {
+      key: 'member',
+      header: 'العضو المشترك',
+      render: (p) => (
+        <div>
+          <div className="font-bold text-white text-sm">{p.member?.full_name || 'عضو الصالة'}</div>
+          <div className="text-[10px] text-gray-400 font-mono" dir="ltr">{p.member?.phone}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'amount_mru',
+      header: 'المبلغ (MRU)',
+      render: (p) => (
+        <span className="font-mono font-bold text-white text-sm">
+          {p.amount_mru.toLocaleString()} MRU
+        </span>
+      ),
+    },
+    {
+      key: 'method',
+      header: 'وسيلة الدفع',
+      render: (p) => {
+        const methodBadges = {
+          bankily: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+          masrvi: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+          sedad: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+          cash: 'bg-gray-500/15 text-gray-300 border-gray-500/30',
+        }[p.method] || 'bg-gray-500/15 text-gray-300';
+
+        return (
+          <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase border ${methodBadges}`}>
+            {p.method}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'status',
+      header: 'الحالة',
+      render: (p) => (
+        p.status === 'cancelled' ? (
+          <span className="inline-flex items-center text-[11px] font-bold text-rose-400 bg-rose-500/15 px-2 py-0.5 rounded border border-rose-500/30">
+            ملغاة محاسبياً
+          </span>
+        ) : (
+          <span className="inline-flex items-center text-[11px] font-bold text-gym-400 bg-gym-500/15 px-2 py-0.5 rounded border border-gym-500/30">
+            مقبولة ومؤكدة
+          </span>
+        )
+      ),
+    },
+    {
+      key: 'created_at',
+      header: 'التاريخ',
+      render: (p) => (
+        <span className="font-mono text-xs text-gray-400">
+          {new Date(p.created_at).toLocaleDateString('ar-MR', {
+            day: '2-digit',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
+        </span>
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'الإجراءات',
+      render: (p) => (
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setReceiptTarget(p)}
+            className="min-h-[44px] px-2.5 py-1 rounded-lg text-xs font-bold text-gym-400 hover:bg-gym-500/15 border border-gym-500/30 transition-colors"
+            title="عرض الإيصال الرقمي"
+          >
+            الإيصال 🧾
+          </button>
+          {p.status !== 'cancelled' ? (
+            <button
+              onClick={() => setCancelTarget(p)}
+              className="min-h-[44px] px-2.5 py-1 rounded-lg text-xs font-bold text-rose-400 hover:bg-rose-500/15 border border-rose-500/30 transition-colors"
+            >
+              إلغاء محاسبي
+            </button>
+          ) : (
+            <span className="text-[10px] text-gray-500 italic max-w-[120px] truncate" title={p.cancellation_reason || ''}>
+              {p.cancellation_reason || 'ملغي'}
+            </span>
+          )}
+        </div>
+      ),
+    },
+  ];
 
   return (
     <>
@@ -68,181 +176,100 @@ export default function PaymentsPage() {
         onOpenRecordPayment={() => setIsRecordOpen(true)}
       />
 
-      <main className="p-8 space-y-6 flex-1">
-        {/* Financial Highlights Banner */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="glass-panel p-5 rounded-2xl border border-amber-500/30">
-            <div className="text-xs font-semibold text-gray-400">إجمالي مدخول الشهر (MRU)</div>
-            <div className="text-2xl font-black text-amber-400 mt-1 font-mono">
-              {mockDashboardMetrics.monthlyRevenueMRU.toLocaleString()} MRU
-            </div>
-            <div className="text-[11px] text-gray-400 mt-2 flex items-center gap-1">
-              <span className="text-gym-400 font-bold">100%</span>
-              <span>أوقية جديدة (أعداد صحيحة)</span>
-            </div>
-          </div>
-
-          <div className="glass-panel p-5 rounded-2xl border border-emerald-500/30">
-            <div className="text-xs font-semibold text-gray-400">تحصيلات بنكيلي (Bankily)</div>
-            <div className="text-2xl font-black text-emerald-400 mt-1 font-mono">
-              46,710 MRU
-            </div>
-            <div className="text-[11px] text-gray-400 mt-2">الحصة الأكبر: 54% من الاشتراكات</div>
-          </div>
-
-          <div className="glass-panel p-5 rounded-2xl border border-blue-500/30">
-            <div className="text-xs font-semibold text-gray-400">تحصيلات مصرفي (Masrvi)</div>
-            <div className="text-2xl font-black text-blue-400 mt-1 font-mono">
-              24,220 MRU
-            </div>
-            <div className="text-[11px] text-gray-400 mt-2">تطبيق مصرفي (BPM): 28%</div>
-          </div>
-
-          <div className="glass-panel p-5 rounded-2xl border border-surface-border">
-            <div className="text-xs font-semibold text-gray-400">النقد وسداد (Cash & Sedad)</div>
-            <div className="text-2xl font-black text-gray-200 mt-1 font-mono">
-              15,570 MRU
-            </div>
-            <div className="text-[11px] text-gray-400 mt-2">صندوق الاستقبال وتطبيق سداد</div>
-          </div>
+      <main className="p-4 sm:p-6 lg:p-8 space-y-6 flex-1 max-w-7xl mx-auto w-full">
+        {/* Real Financial Highlights from Payments DB */}
+        <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard
+            title="إجمالي التحصيلات (MRU)"
+            value={`${metrics.totalRevenue.toLocaleString()} MRU`}
+            icon={<CreditCard className="w-5 h-5 text-amber-400" />}
+            subtitle="أوقية جديدة (أعداد صحيحة)"
+            variant="amber"
+          />
+          <StatCard
+            title="تحصيلات بنكيلي (Bankily)"
+            value={`${metrics.bankilyTotal.toLocaleString()} MRU`}
+            icon={<CreditCard className="w-5 h-5 text-emerald-400" />}
+            subtitle="تطبيق بنكيلي"
+            variant="gym"
+          />
+          <StatCard
+            title="تحصيلات مصرفي (Masrvi)"
+            value={`${metrics.masrviTotal.toLocaleString()} MRU`}
+            icon={<CreditCard className="w-5 h-5 text-blue-400" />}
+            subtitle="تطبيق مصرفي (BPM)"
+          />
+          <StatCard
+            title="النقد وسداد (Cash & Sedad)"
+            value={`${metrics.cashSedadTotal.toLocaleString()} MRU`}
+            icon={<CreditCard className="w-5 h-5 text-gray-400" />}
+            subtitle="صندوق الاستقبال وتطبيق سداد"
+          />
         </section>
 
-        {/* Filter & Search Bar */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 glass-panel p-4 rounded-2xl border border-surface-border">
-          <div className="relative flex-1 max-w-md">
-            <input
-              type="text"
-              placeholder="ابحث بالعضو، الهاتف، أو رقم التحويل..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-4 pr-10 py-2.5 rounded-xl bg-surface-dark border border-surface-border text-sm text-white focus:outline-none focus:border-gym-500 transition-colors"
-            />
-            <Search className="w-4 h-4 text-gray-400 absolute right-3.5 top-3.5 pointer-events-none" />
-          </div>
-
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-            {[
-              { id: 'all', label: 'كافة الطرق' },
-              { id: 'bankily', label: 'بنكيلي' },
-              { id: 'masrvi', label: 'مصرفي' },
-              { id: 'sedad', label: 'سداد' },
-              { id: 'cash', label: 'نقداً' },
-            ].map((tab) => (
+        <PageHeader
+          title="سجل العمليات المالية"
+          subtitle={`إجمالي العمليات المسجلة: ${payments.length}`}
+          action={
+            <div className="flex items-center gap-2">
               <button
-                key={tab.id}
-                onClick={() => setMethodFilter(tab.id)}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-                  methodFilter === tab.id
-                    ? 'bg-amber-500 text-white shadow-sm shadow-amber-600/30 font-bold'
-                    : 'bg-surface-dark text-gray-400 hover:text-white border border-surface-border'
-                }`}
+                onClick={fetchPaymentsList}
+                className="min-h-[44px] px-3.5 py-2 rounded-xl bg-surface-card border border-surface-border text-gray-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all"
+                title="تحديث السجلات"
               >
-                {tab.label}
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">تحديث</span>
               </button>
-            ))}
-          </div>
-        </div>
+              <button
+                onClick={() => setIsRecordOpen(true)}
+                className="min-h-[44px] px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white text-xs font-bold shadow-md shadow-amber-600/30 flex items-center gap-2 transition-all hover:scale-[1.02] active:scale-[0.98]"
+              >
+                <Plus className="w-4 h-4" />
+                <span>تسجيل دفعة</span>
+              </button>
+            </div>
+          }
+        />
 
-        {/* Payments Table */}
-        <div className="glass-panel rounded-2xl border border-surface-border overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-right text-xs">
-              <thead className="bg-surface-dark text-gray-400 uppercase text-[11px] font-semibold border-b border-surface-border">
-                <tr>
-                  <th className="py-3.5 px-5">رقم الوصل</th>
-                  <th className="py-3.5 px-5">العضو المشترك</th>
-                  <th className="py-3.5 px-5">المبلغ (MRU)</th>
-                  <th className="py-3.5 px-5">وسيلة الدفع</th>
-                  <th className="py-3.5 px-5">مرجع المعاملة</th>
-                  <th className="py-3.5 px-5">الموظف المسجل</th>
-                  <th className="py-3.5 px-5">الحالة</th>
-                  <th className="py-3.5 px-5">التاريخ</th>
-                  <th className="py-3.5 px-5 text-center">الإجراءات</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-surface-border/50 text-gray-200">
-                {filteredPayments.map((payment) => {
-                  const mem = mockMembers.find((m) => m.id === payment.member_id);
-                  const isCancelled = payment.status === 'cancelled';
-
-                  return (
-                    <tr
-                      key={payment.id}
-                      className={`hover:bg-surface-border/20 transition-colors ${
-                        isCancelled ? 'opacity-60 bg-red-950/10' : ''
-                      }`}
-                    >
-                      <td className="py-3.5 px-5 font-mono text-[11px] text-gray-400">
-                        {payment.id}
-                      </td>
-                      <td className="py-3.5 px-5 font-bold text-white">
-                        {mem?.full_name || 'عضو'}
-                        <div className="text-[10px] text-gray-400 font-mono font-normal">{mem?.phone}</div>
-                      </td>
-                      <td className="py-3.5 px-5 font-mono font-bold text-white text-sm">
-                        {payment.amount_mru} MRU
-                      </td>
-                      <td className="py-3.5 px-5">
-                        <span
-                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase ${
-                            payment.method === 'bankily'
-                              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                              : payment.method === 'masrvi'
-                              ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
-                              : payment.method === 'sedad'
-                              ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
-                              : 'bg-gray-500/15 text-gray-300 border border-gray-500/30'
-                          }`}
-                        >
-                          {payment.method}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-5 font-mono text-gray-400">
-                        {payment.transaction_ref || '—'}
-                      </td>
-                      <td className="py-3.5 px-5 text-gray-300">
-                        {payment.recorded_by === 'usr-admin' ? 'المدير العام' : 'موظف الاستقبال'}
-                      </td>
-                      <td className="py-3.5 px-5">
-                        {isCancelled ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-red-400 bg-red-500/15 px-2 py-0.5 rounded border border-red-500/30">
-                            ملغي محاسبياً
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-gym-400 bg-gym-500/15 px-2 py-0.5 rounded border border-gym-500/30">
-                            مقبول
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-5 font-mono text-[11px] text-gray-400">
-                        {new Date(payment.created_at).toLocaleDateString('ar-MR', {
-                          day: '2-digit',
-                          month: 'short',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </td>
-                      <td className="py-3.5 px-5 text-center">
-                        {!isCancelled ? (
-                          <button
-                            onClick={() => setCancelTarget(payment)}
-                            className="px-2.5 py-1 rounded text-[11px] font-bold text-red-400 hover:bg-red-500/15 border border-red-500/30 transition-colors"
-                          >
-                            إلغاء محاسبي
-                          </button>
-                        ) : (
-                          <span className="text-[10px] text-gray-400 italic">
-                            سبب: {payment.cancellation_reason}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        {isLoading ? (
+          <TableSkeleton rows={6} />
+        ) : (
+          <DataTable
+            data={filteredPayments}
+            columns={columns}
+            keyExtractor={(p) => p.id}
+            searchPlaceholder="ابحث بالعضو، الهاتف، أو رقم الحوالة..."
+            searchFilter={(p, q) =>
+              (p.member?.full_name || '').toLowerCase().includes(q.toLowerCase()) ||
+              (p.member?.phone || '').includes(q) ||
+              (p.transaction_ref || '').toLowerCase().includes(q.toLowerCase()) ||
+              p.id.toLowerCase().includes(q.toLowerCase())
+            }
+            filterOptions={[
+              { label: `كافة الطرق (${payments.length})`, value: 'all' },
+              {
+                label: `بنكيلي (${payments.filter((p) => p.method === 'bankily').length})`,
+                value: 'bankily',
+              },
+              {
+                label: `مصرفي (${payments.filter((p) => p.method === 'masrvi').length})`,
+                value: 'masrvi',
+              },
+              {
+                label: `سداد (${payments.filter((p) => p.method === 'sedad').length})`,
+                value: 'sedad',
+              },
+              {
+                label: `نقداً (${payments.filter((p) => p.method === 'cash').length})`,
+                value: 'cash',
+              },
+            ]}
+            activeFilter={methodFilter}
+            onFilterChange={setMethodFilter}
+            emptyTitle="لا توجد مدفوعات مسجلة"
+            emptyDescription="يمكنك تسجيل الدفعة الأولى بالنقر على زر 'تسجيل دفعة' أعلاه"
+          />
+        )}
       </main>
 
       {/* Modals */}
@@ -256,7 +283,13 @@ export default function PaymentsPage() {
         payment={cancelTarget}
         isOpen={!!cancelTarget}
         onClose={() => setCancelTarget(null)}
-        onConfirm={handlePaymentCancelled}
+        onSuccess={handlePaymentCancelled}
+      />
+
+      <ReceiptModal
+        payment={receiptTarget}
+        isOpen={!!receiptTarget}
+        onClose={() => setReceiptTarget(null)}
       />
     </>
   );

@@ -123,6 +123,7 @@ export interface Visit {
   source: VisitSource;
   created_at: string;
   member?: Member;
+  branch?: Branch;
 }
 
 export interface AuditLog {
@@ -137,3 +138,49 @@ export interface AuditLog {
   created_at: string;
   actor_profile?: Profile;
 }
+
+export interface PlatformSubscription {
+  id: string;
+  gym_id: string;
+  amount: number; // 3,000 MRU / month
+  start_date: string;
+  end_date: string;
+  status: 'active' | 'trial' | 'suspended' | 'cancelled';
+  gym?: Gym;
+}
+
+export interface Advertisement {
+  id: string;
+  title: string;
+  content: string;
+  image_url?: string;
+  link_url?: string;
+  start_date: string;
+  end_date: string;
+  status: 'active' | 'paused' | 'expired';
+  advertiser: string;
+  views_count?: number;
+  clicks_count?: number;
+}
+
+export interface MemberGoal {
+  id: string;
+  gym_id: string;
+  member_id: string;
+  target_per_week: number;
+  current_streak_weeks: number;
+  completed_this_week: number;
+  created_at: string;
+}
+
+export interface QRCodeToken {
+  id: string;
+  gym_id: string;
+  member_id: string;
+  nonce: string;
+  issued_at: string;
+  expires_at: string;
+  used_at: string | null;
+  signature: string;
+}
+

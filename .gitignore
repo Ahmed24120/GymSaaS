@@ -26,9 +26,11 @@ yarn-error.log*
 # OS files
 .DS_Store
 Thumbs.db
+*.zip
 
 # IDEs
 .idea/
 .vscode/
 *.swp
 *.swo
+*.tsbuildinfo

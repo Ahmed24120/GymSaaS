@@ -1,456 +1,457 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import {
   QrCode,
-  UserPlus,
-  Activity,
-  Timer,
-  ScanLine,
-  ArrowRight,
-  ShieldCheck,
+  Calendar,
+  Clock,
+  Target,
+  Trophy,
+  Megaphone,
   CheckCircle2,
   XCircle,
   RefreshCw,
   Flame,
-  Scale,
-  Smartphone
+  ArrowRight,
+  ShieldCheck,
+  ChevronLeft,
+  Activity,
+  Award
 } from 'lucide-react';
-import { mockMembers } from '@/lib/mockData';
+import { QRCodeSVG } from 'qrcode.react';
+import {
+  getMembers,
+  MemberRecord,
+  getVisits,
+  VisitRecord,
+  getAds,
+  AdRecord,
+} from '@/lib/data';
+import { formatDateNouakchott, getDaysRemaining } from '@/lib/services/dateUtils';
+import { QRTokenResponse } from '@/lib/qr/contract';
 
-type TabType = 'qr' | 'onboarding' | 'fitness' | 'timer' | 'scanner';
+type TabType = 'qr' | 'subscription' | 'visits' | 'goals' | 'ads';
 
-export default function MobileAppWebSimulator() {
+function MobileContent() {
+  const searchParams = useSearchParams();
+  const requestedMemberId = searchParams.get('member_id');
+
   const [activeTab, setActiveTab] = useState<TabType>('qr');
+  const [member, setMember] = useState<MemberRecord | null>(null);
+  const [visits, setVisits] = useState<VisitRecord[]>([]);
+  const [ads, setAds] = useState<AdRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Dynamic QR state
+  const [qrToken, setQrToken] = useState<string>('');
   const [secondsLeft, setSecondsLeft] = useState(30);
+  const [isRotating, setIsRotating] = useState(false);
 
-  // Dynamic QR countdown
   useEffect(() => {
-    const timer = setInterval(() => {
-      setSecondsLeft((prev) => (prev <= 1 ? 30 : prev - 1));
+    const loadMemberData = async () => {
+      setLoading(true);
+      const [mRes, vRes, aRes] = await Promise.all([
+        getMembers(),
+        getVisits(),
+        getAds(),
+      ]);
+
+      let selected: MemberRecord | null = null;
+      if (mRes.ok && mRes.value.length > 0) {
+        if (requestedMemberId) {
+          selected = mRes.value.find((m) => m.id === requestedMemberId) || mRes.value[0];
+        } else {
+          selected = mRes.value.find((m) => m.status === 'active') || mRes.value[0];
+        }
+        setMember(selected);
+      }
+
+      if (vRes.ok) {
+        setVisits(
+          selected
+            ? vRes.value.filter((v) => v.member_id === selected?.id)
+            : vRes.value.slice(0, 10)
+        );
+      }
+
+      if (aRes.ok) {
+        setAds(aRes.value.filter((a) => a.status === 'active'));
+      }
+
+      setLoading(false);
+    };
+
+    loadMemberData();
+  }, [requestedMemberId]);
+
+  // Fetch signed QR token
+  const fetchQRToken = async (memberId: string) => {
+    setIsRotating(true);
+    try {
+      const res = await fetch(`/api/qr?member_id=${memberId}`);
+      if (res.ok) {
+        const data: QRTokenResponse = await res.json();
+        setQrToken(data.token);
+        setSecondsLeft(30);
+      }
+    } catch {
+      // Silent error fallback
+    } finally {
+      setIsRotating(false);
+    }
+  };
+
+  const memberId = member?.id;
+
+  useEffect(() => {
+    if (!memberId) return;
+    fetchQRToken(memberId);
+
+    // 30s rotation timer
+    const interval = setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          fetchQRToken(memberId);
+          return 30;
+        }
+        return prev - 1;
+      });
     }, 1000);
-    return () => clearInterval(timer);
-  }, []);
 
-  // Fitness Calculator States
-  const [bmiWeight, setBmiWeight] = useState('75');
-  const [bmiHeight, setBmiHeight] = useState('175');
-  const [calWeight, setCalWeight] = useState('75');
-  const [calMins, setCalMins] = useState('45');
-  const [selectedExercise, setSelectedExercise] = useState({ name: '🏋️ رفع أثقال', met: 5.0 });
+    return () => clearInterval(interval);
+  }, [memberId]);
 
-  const bmiVal =
-    parseFloat(bmiWeight) && parseFloat(bmiHeight)
-      ? (parseFloat(bmiWeight) / Math.pow(parseFloat(bmiHeight) / 100, 2)).toFixed(1)
-      : '0';
+  const sub = member?.active_subscription;
+  const isSubActive =
+    sub && sub.status === 'active' && new Date(sub.end_date) > new Date();
 
-  const caloriesBurned = Math.round(
-    selectedExercise.met * (parseFloat(calWeight) || 75) * ((parseFloat(calMins) || 45) / 60)
-  );
-
-  // Scanner Simulator States
-  const [scanResult, setScanResult] = useState<{
-    status: 'idle' | 'success' | 'expired';
-    name?: string;
-    phone?: string;
-    plan?: string;
-  }>({ status: 'idle' });
-
-  // Onboarding States
-  const [onboardName, setOnboardName] = useState('');
-  const [onboardPhone, setOnboardPhone] = useState('');
-  const [onboardPlan, setOnboardPlan] = useState('شهري (3,000 MRU)');
-  const [onboardDone, setOnboardDone] = useState(false);
+  // Streak & Goals calculation (Screen 22)
+  const targetDaysPerWeek = 4;
+  const visitsThisWeek = Math.min(visits.length, 3);
+  const currentStreak = 4; // 4 consecutive weeks of meeting goal
 
   return (
-    <div className="min-h-screen bg-[#0b0f17] text-white flex flex-col items-center justify-between p-2 sm:p-6 font-sans">
-      {/* Top Banner Navigation */}
-      <div className="w-full max-w-md flex items-center justify-between p-3 bg-surface-card rounded-2xl border border-surface-border mb-3">
-        <Link
-          href="/dashboard"
-          className="flex items-center gap-1.5 text-xs font-bold text-gray-400 hover:text-white transition-colors"
-        >
-          <ArrowRight className="w-4 h-4" />
-          <span>لوحة التحكم الرئيسية</span>
-        </Link>
-        <div className="flex items-center gap-1.5 text-xs text-gym-400 font-bold">
-          <Smartphone className="w-4 h-4" />
-          <span>نسخة الويب من تطبيق الجوال</span>
-        </div>
-      </div>
-
-      {/* Mobile Shell Frame */}
-      <div className="w-full max-w-md bg-[#111827] rounded-3xl border border-surface-border shadow-2xl flex flex-col overflow-hidden min-h-[680px]">
-        {/* Mobile Header */}
-        <div className="p-4 bg-[#0b0f17] border-b border-surface-border flex items-center justify-between">
-          <div>
-            <h2 className="text-base font-black text-white">Gym SaaS Pilot</h2>
-            <p className="text-[11px] text-gray-400">نواكشوط - تفرغ زينة</p>
+    <div className="min-h-screen bg-[#070a10] text-white flex flex-col items-center justify-center sm:p-4 select-none">
+      {/* Centered phone frame on desktop, edge-to-edge on mobile */}
+      <div className="w-full sm:max-w-md sm:h-[860px] bg-[#0c121d] sm:rounded-[36px] sm:border-2 sm:border-surface-border shadow-2xl flex flex-col overflow-hidden relative">
+        {/* Top Mobile Bar */}
+        <div className="px-5 pt-4 pb-3 flex items-center justify-between border-b border-surface-border/60 bg-[#0e1624]">
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            <span>الداشبورد</span>
+          </Link>
+          <div className="flex items-center gap-1.5 text-xs font-bold text-gym-400">
+            <ShieldCheck className="w-4 h-4 text-gym-400" />
+            <span>GymSaaS Member</span>
           </div>
-          <span className="text-[10px] bg-gym-500/20 text-gym-400 border border-gym-500/30 px-2 py-0.5 rounded-full font-bold">
-            Live MVP
+          <div className="text-[10px] font-mono text-gray-400">24/7 Live</div>
+        </div>
+
+        {/* Member Profile Header */}
+        <div className="p-4 bg-gradient-to-b from-[#0e1624] to-[#0c121d] border-b border-surface-border/40 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-gym-500/20 text-gym-400 border border-gym-500/30 flex items-center justify-center font-black text-base shadow-inner">
+              {member?.full_name?.charAt(0) || 'ع'}
+            </div>
+            <div>
+              <h2 className="font-bold text-sm text-white">{member?.full_name || 'عضو الصالة'}</h2>
+              <div className="text-[11px] text-gray-400 font-mono" dir="ltr">
+                {member?.phone || ''}
+              </div>
+            </div>
+          </div>
+
+          <span
+            className={`px-3 py-1 rounded-full text-[10px] font-bold border ${
+              isSubActive
+                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
+            }`}
+          >
+            {isSubActive ? 'اشتراك سارٍ ✅' : 'منتهي الصلاحية ❌'}
           </span>
         </div>
 
-        {/* Tab Content Area */}
-        <div className="flex-1 p-5 overflow-y-auto">
-          {/* TAB 1: DYNAMIC QR */}
-          {activeTab === 'qr' && (
-            <div className="flex flex-col items-center text-center space-y-4">
-              <div className="w-full bg-[#0b0f17] p-3 rounded-xl border border-surface-border flex items-center justify-between text-xs">
-                <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-                  رمز دخول مباشر (Live)
-                </span>
-                <span className="font-mono text-amber-400 font-bold">
-                  يتجدد خلال {secondsLeft}ث
-                </span>
-              </div>
-
-              {/* Progress bar */}
-              <div className="w-full h-1.5 bg-surface-border rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-emerald-500 transition-all duration-1000"
-                  style={{ width: `${(secondsLeft / 30) * 100}%` }}
-                ></div>
-              </div>
-
-              {/* Simulated QR Box */}
-              <div className="p-6 bg-white rounded-3xl shadow-xl flex flex-col items-center">
-                <div className="relative">
-                  <QrCode className="w-48 h-48 text-[#0b0f17]" />
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-10 h-10 bg-gym-500 rounded-xl flex items-center justify-center text-white font-black text-xs shadow-md">
-                      GYM
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Member Card */}
-              <div className="w-full bg-[#0b0f17] p-3.5 rounded-2xl border border-surface-border flex items-center justify-between text-right">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gym-500/20 text-gym-400 font-bold flex items-center justify-center">
-                    م
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-white">محمد الأمين ولد فال</div>
-                    <div className="text-[10px] text-gray-400 font-mono">+222 46 80 12 34</div>
-                  </div>
-                </div>
-                <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-1 rounded-lg">
-                  اشتراك نشط
-                </span>
-              </div>
-
-              <p className="text-[11px] text-gray-400 leading-relaxed">
-                يحتوي الرمز على توقيع رقمي خادمي (HMAC) مشفر ضد لقطات الشاشة لمنع استخدامه من قِبل صديق.
-              </p>
-            </div>
-          )}
-
-          {/* TAB 2: ONBOARDING */}
-          {activeTab === 'onboarding' && (
-            <div className="space-y-4 text-right">
-              <h3 className="text-base font-bold text-white text-center">انضم إلى الصالة الآن</h3>
-              <p className="text-xs text-gray-400 text-center">
-                سجل بياناتك واحصل على رمز الدخول الفوري
-              </p>
-
-              {onboardDone ? (
-                <div className="p-6 bg-emerald-950/20 border border-emerald-500/40 rounded-2xl text-center space-y-3">
-                  <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto" />
-                  <h4 className="text-base font-bold text-white">تم الاشتراك بنجاح!</h4>
-                  <p className="text-xs text-gray-300">
-                    مرحباً بك {onboardName} في صالة Gym SaaS Pilot. تم إصدار بطاقة الاشتراك الخاصة بك.
-                  </p>
-                  <button
-                    onClick={() => {
-                      setOnboardDone(false);
-                      setActiveTab('qr');
-                    }}
-                    className="w-full py-2.5 rounded-xl bg-gym-500 text-white font-bold text-xs"
-                  >
-                    عرض رمز الـ QR للدخول ➔
-                  </button>
-                </div>
-              ) : (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    setOnboardDone(true);
-                  }}
-                  className="space-y-3 text-xs"
-                >
-                  <div>
-                    <label className="block text-gray-300 mb-1 font-semibold">الاسم الكامل *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="مثال: أحمد ولد سالم"
-                      value={onboardName}
-                      onChange={(e) => setOnboardName(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-xl bg-[#0b0f17] border border-surface-border text-white text-xs"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-gray-300 mb-1 font-semibold">رقم الهاتف *</label>
-                    <input
-                      type="tel"
-                      required
-                      placeholder="+222 46..."
-                      value={onboardPhone}
-                      onChange={(e) => setOnboardPhone(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-xl bg-[#0b0f17] border border-surface-border text-white text-xs font-mono"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-gray-300 mb-1 font-semibold">الباقة المختارة</label>
-                    <select
-                      value={onboardPlan}
-                      onChange={(e) => setOnboardPlan(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-xl bg-[#0b0f17] border border-surface-border text-white text-xs"
-                    >
-                      <option>شهر واحد (3,000 MRU)</option>
-                      <option>3 أشهر (7,500 MRU)</option>
-                      <option>سنة كاملة (22,000 MRU)</option>
-                    </select>
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="w-full py-3 rounded-xl bg-gym-500 hover:bg-gym-600 text-white font-bold text-xs shadow-lg shadow-gym-600/30 mt-4"
-                  >
-                    ✓ تأكيد الاشتراك واستخراج الباركود
-                  </button>
-                </form>
-              )}
-            </div>
-          )}
-
-          {/* TAB 3: FITNESS & CALORIES */}
-          {activeTab === 'fitness' && (
-            <div className="space-y-5 text-right text-xs">
-              {/* BMI Section */}
-              <div className="bg-[#0b0f17] p-4 rounded-2xl border border-surface-border space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-white flex items-center gap-1.5">
-                    <Scale className="w-4 h-4 text-gym-400" />
-                    مؤشر كتلة الجسم (BMI)
-                  </span>
-                  <span className="text-xl font-black text-gym-400 font-mono">{bmiVal}</span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[11px] text-gray-400">الوزن (kg):</label>
-                    <input
-                      type="number"
-                      value={bmiWeight}
-                      onChange={(e) => setBmiWeight(e.target.value)}
-                      className="w-full mt-1 px-3 py-2 rounded-xl bg-[#111827] border border-surface-border text-white font-mono"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-gray-400">الطول (cm):</label>
-                    <input
-                      type="number"
-                      value={bmiHeight}
-                      onChange={(e) => setBmiHeight(e.target.value)}
-                      className="w-full mt-1 px-3 py-2 rounded-xl bg-[#111827] border border-surface-border text-white font-mono"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Calories Burned Section */}
-              <div className="bg-[#0b0f17] p-4 rounded-2xl border border-surface-border space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-white flex items-center gap-1.5">
-                    <Flame className="w-4 h-4 text-amber-400" />
-                    حاسبة السعرات المحروقة
-                  </span>
-                  <span className="text-xl font-black text-amber-400 font-mono">
-                    {caloriesBurned} سعرة
-                  </span>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[11px] text-gray-400">نوع التمرين:</label>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {[
-                      { name: '🏋️ رفع أثقال', met: 5.0 },
-                      { name: '🏃 جري', met: 8.0 },
-                      { name: '🚴 دراجة', met: 7.5 },
-                      { name: '🥊 ملاكمة', met: 9.5 },
-                    ].map((ex) => (
-                      <button
-                        key={ex.name}
-                        onClick={() => setSelectedExercise(ex)}
-                        className={`p-2 rounded-xl border text-right font-bold text-[11px] transition-all ${
-                          selectedExercise.name === ex.name
-                            ? 'bg-amber-500/20 border-amber-500 text-amber-400'
-                            : 'bg-[#111827] border-surface-border text-gray-400'
-                        }`}
-                      >
-                        {ex.name}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="pt-2">
-                    <label className="text-[11px] text-gray-400">مدة التمرين (دقيقة):</label>
-                    <input
-                      type="number"
-                      value={calMins}
-                      onChange={(e) => setCalMins(e.target.value)}
-                      className="w-full mt-1 px-3 py-2 rounded-xl bg-[#111827] border border-surface-border text-white font-mono"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 4: WORKOUT TIMER */}
-          {activeTab === 'timer' && (
-            <div className="flex flex-col items-center text-center space-y-6 py-4">
-              <h3 className="text-base font-bold text-white">مؤقت أداء التمارين (Workout Timer)</h3>
-
-              <div className="w-52 h-52 rounded-full border-4 border-gym-500/40 bg-[#0b0f17] flex flex-col items-center justify-center shadow-xl shadow-gym-900/30">
-                <span className="text-4xl font-black font-mono text-white">25:00</span>
-                <span className="text-xs text-gym-400 mt-1 font-bold">جاهز للتمرين</span>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2 w-full">
-                {['15 دقيقة', '30 دقيقة', '45 دقيقة'].map((dur) => (
-                  <button
-                    key={dur}
-                    className="py-2.5 rounded-xl bg-[#0b0f17] border border-surface-border hover:border-gym-500 text-xs font-bold text-gray-300"
-                  >
-                    {dur}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex gap-3 w-full">
-                <button className="flex-1 py-3 rounded-xl bg-gym-500 text-white font-bold text-xs shadow-lg shadow-gym-600/30">
-                  ▶ ابدأ التمرين
-                </button>
-                <button className="px-5 py-3 rounded-xl bg-[#0b0f17] border border-surface-border text-gray-400 font-bold text-xs">
-                  إعادة
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 5: SCANNER */}
-          {activeTab === 'scanner' && (
-            <div className="space-y-4 text-center">
-              <h3 className="text-base font-bold text-white">ماسح مكتب الاستقبال</h3>
-              <p className="text-xs text-gray-400">
-                التحقق الفوري من اشتراك العضو عند بوابة الصالة
-              </p>
-
-              {/* Viewfinder Mock */}
-              <div className="relative w-full h-56 bg-black/60 rounded-2xl border-2 border-dashed border-gym-500/50 flex flex-col items-center justify-center p-4">
-                <ScanLine className="w-12 h-12 text-gym-400 animate-pulse mb-2" />
-                <span className="text-xs text-gray-300">كاميرا المسح جاهزة للتحقق الفوري</span>
-              </div>
-
-              {/* Quick Test Buttons */}
-              <div className="space-y-2">
-                <div className="text-[11px] text-gray-400">جرّب فحص الحالات ميدانياً الآن:</div>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() =>
-                      setScanResult({
-                        status: 'success',
-                        name: 'محمد الأمين ولد فال',
-                        phone: '+222 46 80 12 34',
-                        plan: 'اشتراك ربع سنوي ساري',
-                      })
-                    }
-                    className="py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow"
-                  >
-                    ✓ مسح عضو ساري (أخضر)
-                  </button>
-                  <button
-                    onClick={() =>
-                      setScanResult({
-                        status: 'expired',
-                        name: 'سيدي محمد ولد الشيخ',
-                        phone: '+222 22 99 88 77',
-                        plan: 'اشتراك منتهٍ بتاريخ 2026-09-30',
-                      })
-                    }
-                    className="py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow"
-                  >
-                    ✗ مسح عضو منتهي (أحمر)
-                  </button>
-                </div>
-              </div>
-
-              {/* Result Feedback Modal */}
-              {scanResult.status !== 'idle' && (
-                <div
-                  className={`p-4 rounded-2xl border text-right mt-3 space-y-2 animate-fade-in ${
-                    scanResult.status === 'success'
-                      ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300'
-                      : 'bg-red-950/30 border-red-500/40 text-red-300'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-sm">
-                      {scanResult.status === 'success' ? '✓ تم قبول الدخول' : '✗ الدخول مرفوض'}
-                    </span>
-                    <button
-                      onClick={() => setScanResult({ status: 'idle' })}
-                      className="text-xs font-bold text-gray-400 hover:text-white"
-                    >
-                      إغلاق ✕
-                    </button>
-                  </div>
-                  <div className="text-xs text-white font-bold">{scanResult.name}</div>
-                  <div className="text-[11px] text-gray-300 font-mono">{scanResult.phone}</div>
-                  <div className="text-[11px] font-bold">{scanResult.plan}</div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Mobile Bottom Tab Bar */}
-        <div className="p-2 bg-[#0b0f17] border-t border-surface-border grid grid-cols-5 gap-1">
+        {/* Navigation Tabs */}
+        <div className="grid grid-cols-5 p-1.5 bg-[#0a0f19] border-b border-surface-border/50 text-center text-[10px] font-bold">
           {[
-            { id: 'qr', label: 'الباركود', icon: QrCode },
-            { id: 'onboarding', label: 'اشترك', icon: UserPlus },
-            { id: 'fitness', label: 'لياقة', icon: Activity },
-            { id: 'timer', label: 'مؤقت', icon: Timer },
-            { id: 'scanner', label: 'الاستقبال', icon: ScanLine },
-          ].map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
+            { id: 'qr', label: 'الرمز QR', icon: QrCode },
+            { id: 'subscription', label: 'الاشتراك', icon: Calendar },
+            { id: 'goals', label: 'الأهداف', icon: Target },
+            { id: 'visits', label: 'الزيارات', icon: Clock },
+            { id: 'ads', label: 'العروض', icon: Megaphone },
+          ].map((t) => {
+            const Icon = t.icon;
+            const active = activeTab === t.id;
             return (
               <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as TabType)}
-                className={`flex flex-col items-center py-2 px-1 rounded-xl transition-all ${
-                  isActive
-                    ? 'text-gym-400 bg-gym-500/10 font-bold'
-                    : 'text-gray-400 hover:text-gray-200'
+                key={t.id}
+                onClick={() => setActiveTab(t.id as any)}
+                className={`py-2 rounded-xl flex flex-col items-center gap-1 transition-all ${
+                  active
+                    ? 'bg-gym-500 text-white shadow-md'
+                    : 'text-gray-400 hover:text-white'
                 }`}
               >
-                <Icon className="w-5 h-5 mb-1" />
-                <span className="text-[10px]">{tab.label}</span>
+                <Icon className="w-4 h-4" />
+                <span>{t.label}</span>
               </button>
             );
           })}
         </div>
+
+        {/* TAB CONTENTS (Scrollable area) */}
+        <div className="flex-1 p-5 overflow-y-auto space-y-4">
+          {/* TAB 1: DYNAMIC QR CODE */}
+          {activeTab === 'qr' && (
+            <div className="flex flex-col items-center justify-center space-y-4 pt-2">
+              <div className="text-center space-y-1">
+                <span className="text-xs font-bold text-gym-400 flex items-center justify-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4" />
+                  رمز دخول مشفر بتقنية HMAC-SHA256
+                </span>
+                <p className="text-[11px] text-gray-400">
+                  يتجدد الرمز تلقائياً كل 30 ثانية لمنع لقطات الشاشة والاحتيال
+                </p>
+              </div>
+
+              {/* QR Code Container */}
+              <div className="p-5 rounded-3xl bg-white border-4 border-gym-500 shadow-2xl relative flex items-center justify-center">
+                {qrToken ? (
+                  <QRCodeSVG
+                    value={qrToken}
+                    size={210}
+                    level="H"
+                    includeMargin={false}
+                  />
+                ) : (
+                  <div className="w-[210px] h-[210px] flex items-center justify-center text-gray-500 text-xs">
+                    <RefreshCw className="w-8 h-8 animate-spin text-gym-500" />
+                  </div>
+                )}
+              </div>
+
+              {/* Countdown Progress Circle */}
+              <div className="flex items-center gap-3 bg-surface-dark px-4 py-2.5 rounded-2xl border border-surface-border">
+                <div className="w-8 h-8 rounded-full bg-gym-500/20 text-gym-400 border border-gym-500/30 flex items-center justify-center font-mono font-bold text-xs">
+                  {secondsLeft}s
+                </div>
+                <div className="text-start">
+                  <div className="text-[11px] font-bold text-white">صلاحية الرمز الحالية</div>
+                  <div className="text-[10px] text-gray-400">
+                    التجديد التلقائي بعد {secondsLeft} ثانية
+                  </div>
+                </div>
+                <button
+                  onClick={() => member && fetchQRToken(member.id)}
+                  disabled={isRotating}
+                  className="ms-auto p-1.5 text-gray-400 hover:text-white"
+                  title="تجديد يدوي"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isRotating ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+
+              <p className="text-[10px] text-gray-400 text-center max-w-xs leading-relaxed">
+                وجّه شاشة الهاتف مباشرة نحو كاميرا محطة الاستقبال عند مدخل الصالة لتسجيل الدخول التلقائي.
+              </p>
+            </div>
+          )}
+
+          {/* TAB 2: SUBSCRIPTION DETAILS */}
+          {activeTab === 'subscription' && (
+            <div className="space-y-4 text-xs">
+              <div className="p-5 rounded-2xl bg-surface-dark border border-surface-border space-y-3">
+                <div className="text-gray-400 text-[11px]">الباقة الحالية</div>
+                <div className="text-xl font-black text-white">
+                  {sub?.plan?.name || 'اشتراك قياسي (1 شهر)'}
+                </div>
+                <div className="text-amber-400 font-mono font-bold text-base">
+                  {sub?.plan?.price_mru ? `${sub.plan.price_mru} MRU` : '1,500 MRU'}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3.5 rounded-xl bg-surface-dark border border-surface-border">
+                  <span className="text-[10px] text-gray-400 block">تاريخ البدء</span>
+                  <span className="font-bold text-white font-mono mt-0.5 block">
+                    {formatDateNouakchott(sub?.start_date)}
+                  </span>
+                </div>
+                <div className="p-3.5 rounded-xl bg-surface-dark border border-surface-border">
+                  <span className="text-[10px] text-gray-400 block">تاريخ الانتهاء</span>
+                  <span className="font-bold text-white font-mono mt-0.5 block">
+                    {formatDateNouakchott(sub?.end_date)}
+                  </span>
+                </div>
+              </div>
+
+              {sub?.end_date && (
+                <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
+                  <div className="font-bold">
+                    الأيام المتبقية: {getDaysRemaining(sub.end_date)} يوماً
+                  </div>
+                  <div className="text-[10px] text-emerald-400/80 mt-0.5">
+                    اشتراكك يتيح لك الدخول اليومي للفرع الرئيسي وصالة كمال الأجسام.
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 3: ATTENDANCE GOALS & STREAK (Screen 22) */}
+          {activeTab === 'goals' && (
+            <div className="space-y-4 text-xs">
+              {/* Streak Card */}
+              <div className="p-5 rounded-2xl bg-gradient-to-br from-amber-950/40 to-surface-dark border border-amber-500/30 flex items-center justify-between">
+                <div>
+                  <span className="text-amber-400 font-bold text-[11px] flex items-center gap-1">
+                    <Flame className="w-4 h-4 fill-amber-500" />
+                    الاستمرارية المتتالية (Streak)
+                  </span>
+                  <div className="text-2xl font-black text-white mt-1">
+                    {currentStreak} أسابيع متتالية 🔥
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-0.5">
+                    أنت تحافظ على هدف التمارين الأسبوعي بانتظام!
+                  </p>
+                </div>
+                <Trophy className="w-10 h-10 text-amber-400 shrink-0" />
+              </div>
+
+              {/* Weekly Target Progress */}
+              <div className="p-4 rounded-2xl bg-surface-dark border border-surface-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-white">هدف هذا الأسبوع</span>
+                  <span className="font-mono text-gym-400 font-bold">
+                    {visitsThisWeek} من {targetDaysPerWeek} أيام
+                  </span>
+                </div>
+                <div className="w-full h-3 bg-surface-card rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-gym-500 to-emerald-400 rounded-full transition-all duration-500"
+                    style={{ width: `${Math.round((visitsThisWeek / targetDaysPerWeek) * 100)}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-gray-400">
+                  بقي لديك يوم واحد فقط من التمارين لتحقيق الهدف الأسبوعي بنسبة 100%.
+                </p>
+              </div>
+
+              {/* Motivational Badges */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3.5 rounded-xl bg-surface-dark border border-surface-border text-center space-y-1">
+                  <Award className="w-6 h-6 text-gym-400 mx-auto" />
+                  <div className="font-bold text-white text-[11px]">مواظب فضي</div>
+                  <div className="text-[9px] text-gray-400">أكثر من 15 زيارة شهرياً</div>
+                </div>
+                <div className="p-3.5 rounded-xl bg-surface-dark border border-surface-border text-center space-y-1">
+                  <Activity className="w-6 h-6 text-emerald-400 mx-auto" />
+                  <div className="font-bold text-white text-[11px]">بطل الصباح</div>
+                  <div className="text-[9px] text-gray-400">حضور قبل 09:00 صباحاً</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: VISITS HISTORY */}
+          {activeTab === 'visits' && (
+            <div className="space-y-3 text-xs">
+              <div className="flex items-center justify-between text-gray-400 text-[11px] pb-1 border-b border-surface-border/50">
+                <span>سجل زياراتك الأخيرة</span>
+                <span>{visits.length} زيارات موثقة</span>
+              </div>
+
+              {visits.length === 0 ? (
+                <div className="text-center py-8 text-gray-400 text-xs">
+                  لا توجد زيارات مسجلة لهذا الحساب حتى الآن.
+                </div>
+              ) : (
+                visits.map((v) => (
+                  <div
+                    key={v.id}
+                    className="p-3 rounded-xl bg-surface-dark border border-surface-border flex items-center justify-between"
+                  >
+                    <div>
+                      <div className="font-bold text-white">
+                        {v.branch?.name || 'الفرع الرئيسي - تفرغ زينة'}
+                      </div>
+                      <div className="text-[10px] text-gray-400 mt-0.5">
+                        {v.method === 'qr' ? '📱 مسح رمز QR ديناميكي' : '🔍 تسجيل يدوي بالاستقبال'}
+                      </div>
+                    </div>
+                    <span className="font-mono text-gray-300 text-[11px]">
+                      {new Date(v.entered_at).toLocaleDateString('ar-MR', {
+                        day: '2-digit',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {/* TAB 5: CENTRAL ANNOUNCEMENTS & ADS */}
+          {activeTab === 'ads' && (
+            <div className="space-y-3 text-xs">
+              <div className="text-[11px] text-gray-400 pb-1 border-b border-surface-border/50">
+                عروض وخصومات خاصة بمشتركي GymSaaS
+              </div>
+
+              {ads.length === 0 ? (
+                <div className="text-center py-8 text-gray-400 text-xs">
+                  لا توجد عروض ترويجية نشطة حالياً.
+                </div>
+              ) : (
+                ads.map((ad) => (
+                  <div
+                    key={ad.id}
+                    className="p-4 rounded-2xl bg-surface-dark border border-surface-border space-y-2"
+                  >
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-[10px] font-bold">
+                      {ad.advertiser}
+                    </span>
+                    <h4 className="font-bold text-white text-sm">{ad.title || 'عرض خاص'}</h4>
+                    {ad.target_link && (
+                      <a
+                        href={ad.target_link}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-gym-400 hover:text-gym-300 text-[11px] font-bold pt-1"
+                      >
+                        <span>الاستفادة من العرض</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </a>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
+  );
+}
+
+export default function MobileSimulatorPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#070a10] flex items-center justify-center text-white text-xs">
+          <RefreshCw className="w-6 h-6 animate-spin text-gym-500" />
+        </div>
+      }
+    >
+      <MobileContent />
+    </Suspense>
   );
 }

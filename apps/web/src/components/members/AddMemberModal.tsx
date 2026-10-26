@@ -1,242 +1,283 @@
 'use client';
 
-import React, { useState } from 'react';
-import { X, UserPlus, Phone, Calendar, CreditCard, Dumbbell, MapPin, CheckCircle } from 'lucide-react';
-import { mockBranches, mockPlans } from '@/lib/mockData';
-import { Member, PaymentMethod } from '@/types/database';
+import React, { useState, useEffect } from 'react';
+import { UserPlus, Phone, Dumbbell, MapPin, CheckCircle } from 'lucide-react';
+import { Modal } from '@/components/ui/Modal';
+import { createMember, MemberRecord } from '@/lib/data/members';
+import { recordPayment } from '@/lib/data/payments';
+import { getPlans, PlanRecord } from '@/lib/data/plans';
+import { getBranches, BranchRecord } from '@/lib/data/branches';
+import { useToast } from '@/components/common/Toast';
 
 interface AddMemberModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (newMember: Partial<Member>) => void;
+  onSuccess: (newMember: MemberRecord) => void;
 }
 
 export default function AddMemberModal({ isOpen, onClose, onSuccess }: AddMemberModalProps) {
+  const { showToast } = useToast();
+
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
-  const [branchId, setBranchId] = useState(mockBranches[0].id);
-  const [planId, setPlanId] = useState(mockPlans[0].id);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('bankily');
+  const [branchId, setBranchId] = useState('');
+  const [planId, setPlanId] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'bankily' | 'masrvi' | 'sedad' | 'cash'>('bankily');
   const [transactionRef, setTransactionRef] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  if (!isOpen) return null;
+  const [branches, setBranches] = useState<BranchRecord[]>([]);
+  const [plans, setPlans] = useState<PlanRecord[]>([]);
 
-  const selectedPlan = mockPlans.find((p) => p.id === planId) || mockPlans[0];
+  useEffect(() => {
+    if (isOpen) {
+      getBranches().then((res) => {
+        if (res.ok && res.value.length > 0) {
+          setBranches(res.value);
+          setBranchId(res.value[0].id);
+        }
+      });
+      getPlans().then((res) => {
+        if (res.ok && res.value.length > 0) {
+          const activePlans = res.value.filter((p) => p.active);
+          setPlans(activePlans);
+          if (activePlans.length > 0) setPlanId(activePlans[0].id);
+        }
+      });
+    }
+  }, [isOpen]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const selectedPlan = plans.find((p) => p.id === planId);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!fullName.trim() || !phone.trim() || !planId || !selectedPlan) {
+      showToast({ type: 'warning', title: 'يرجى ملء جميع الحقول الإلزامية' });
+      return;
+    }
+
     setIsSubmitting(true);
 
-    setTimeout(() => {
-      const now = new Date();
-      const endDate = new Date(now.getTime() + selectedPlan.duration_days * 24 * 60 * 60 * 1000);
+    try {
+      // 1. Create real member in public.members
+      const memRes = await createMember({
+        full_name: fullName.trim(),
+        phone: phone.trim().startsWith('+222') ? phone.trim() : `+222 ${phone.trim()}`,
+        branch_id: branchId || null,
+      });
 
-      const createdMember: Partial<Member> = {
-        id: `mem-${Date.now()}`,
-        full_name: fullName,
-        phone: phone.startsWith('+222') ? phone : `+222 ${phone}`,
-        branch_id: branchId,
+      if (!memRes.ok) {
+        showToast({ type: 'error', title: memRes.error.message });
+        setIsSubmitting(false);
+        return;
+      }
+
+      const createdMember = memRes.value;
+
+      // 2. Record initial payment & create subscription
+      const payRes = await recordPayment({
+        member_id: createdMember.id,
+        plan_id: selectedPlan.id,
+        duration_days: selectedPlan.duration_days,
+        amount_mru: selectedPlan.price_mru,
+        method: paymentMethod,
+        transaction_ref: transactionRef.trim() || undefined,
+      });
+
+      if (!payRes.ok) {
+        showToast({ type: 'error', title: 'تم تسجيل العضو لكن فشل تسجيل الدفعة: ' + payRes.error.message });
+      } else {
+        showToast({ type: 'success', title: 'تم تسجيل العضو وتفعيل الاشتراك بنجاح' });
+      }
+
+      onSuccess({
+        ...createdMember,
         status: 'active',
-        created_at: now.toISOString(),
-        active_subscription: {
-          id: `sub-${Date.now()}`,
-          gym_id: 'gym-001',
-          member_id: `mem-${Date.now()}`,
-          plan_id: planId,
-          start_date: now.toISOString(),
-          end_date: endDate.toISOString(),
+        active_subscription: payRes.ok && payRes.value.subscription ? {
+          id: payRes.value.subscription.id,
+          start_date: payRes.value.subscription.start_date,
+          end_date: payRes.value.subscription.end_date,
           status: 'active',
-          created_at: now.toISOString(),
-          updated_at: now.toISOString(),
-          plan: selectedPlan,
-        },
-      };
+          plan: selectedPlan ? { id: selectedPlan.id, name: selectedPlan.name, price_mru: selectedPlan.price_mru } : null,
+        } : null,
+      });
 
-      onSuccess(createdMember);
+      // Reset form
+      setFullName('');
+      setPhone('');
+      setTransactionRef('');
       setIsSubmitting(false);
       onClose();
-    }, 600);
+    } catch {
+      showToast({ type: 'error', title: 'حدث خطأ غير متوقع أثناء الحفظ' });
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
-      <div className="relative w-full max-w-xl bg-surface-card border border-surface-border rounded-2xl shadow-2xl overflow-hidden">
-        {/* Modal Header */}
-        <div className="px-6 py-5 border-b border-surface-border flex items-center justify-between bg-surface-dark/50">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gym-500/10 border border-gym-500/30 flex items-center justify-center text-gym-400">
-              <UserPlus className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-white">تسجيل عضو جديد</h3>
-              <p className="text-xs text-gray-400">إدخال بيانات المشترك وتفعيل خطته الرياضية فورياً</p>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="تسجيل عضو جديد"
+      subtitle="إدخال بيانات المشترك وتفعيل خطته الرياضية فورياً في قاعدة البيانات"
+      maxWidth="lg"
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Full Name */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-300 mb-1.5">
+              الاسم الكامل <span className="text-red-400">*</span>
+            </label>
+            <input
+              type="text"
+              required
+              placeholder="مثال: سيدي محمد ولد محمد"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl bg-surface-dark border border-surface-border text-sm text-white focus:outline-none focus:border-gym-500 transition-colors"
+            />
+          </div>
+
+          {/* Phone */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-300 mb-1.5">
+              رقم الهاتف (موريتانيا) <span className="text-red-400">*</span>
+            </label>
+            <div className="relative">
+              <input
+                type="tel"
+                inputMode="tel"
+                required
+                placeholder="2x / 3x / 4x xx xx xx"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="w-full min-h-[44px] ps-3.5 pe-10 py-2.5 rounded-xl bg-surface-dark border border-surface-border text-sm text-white focus:outline-none focus:border-gym-500 transition-colors font-mono"
+                dir="ltr"
+              />
+              <Phone className="w-4 h-4 text-gray-500 absolute end-3.5 top-3.5 pointer-events-none" />
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-surface-border transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
-        {/* Modal Body Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Full Name */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-300 mb-1.5">
-                الاسم الكامل <span className="text-red-400">*</span>
-              </label>
-              <input
-                type="text"
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Branch */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-300 mb-1.5">الفرع</label>
+            <div className="relative">
+              <select
+                value={branchId}
+                onChange={(e) => setBranchId(e.target.value)}
+                className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl bg-surface-dark border border-surface-border text-sm text-white focus:outline-none focus:border-gym-500 transition-colors cursor-pointer"
+              >
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+              <MapPin className="w-4 h-4 text-gray-500 absolute end-3.5 top-3.5 pointer-events-none" />
+            </div>
+          </div>
+
+          {/* Subscription Plan */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-300 mb-1.5">
+              نوع باقة الاشتراك <span className="text-red-400">*</span>
+            </label>
+            <div className="relative">
+              <select
+                value={planId}
+                onChange={(e) => setPlanId(e.target.value)}
                 required
-                placeholder="مثال: سيدي محمد ولد محمد"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-surface-dark border border-surface-border text-sm text-white focus:outline-none focus:border-gym-500 transition-colors"
-              />
-            </div>
-
-            {/* Phone */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-300 mb-1.5">
-                رقم الهاتف (موريتانيا) <span className="text-red-400">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  required
-                  placeholder="2x / 3x / 4x xx xx xx"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full pl-3 pr-10 py-2.5 rounded-xl bg-surface-dark border border-surface-border text-sm text-white focus:outline-none focus:border-gym-500 transition-colors text-left font-mono"
-                  dir="ltr"
-                />
-                <Phone className="w-4 h-4 text-gray-500 absolute right-3.5 top-3" />
-              </div>
+                className="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl bg-surface-dark border border-surface-border text-sm text-white focus:outline-none focus:border-gym-500 transition-colors cursor-pointer"
+              >
+                {plans.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({p.price_mru} MRU)
+                  </option>
+                ))}
+              </select>
+              <Dumbbell className="w-4 h-4 text-gray-500 absolute end-3.5 top-3.5 pointer-events-none" />
             </div>
           </div>
+        </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Branch */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-300 mb-1.5">
-                الفرع <span className="text-red-400">*</span>
-              </label>
-              <div className="relative">
-                <select
-                  value={branchId}
-                  onChange={(e) => setBranchId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-dark border border-surface-border text-sm text-white focus:outline-none focus:border-gym-500 transition-colors cursor-pointer"
-                >
-                  {mockBranches.map((branch) => (
-                    <option key={branch.id} value={branch.id}>
-                      {branch.name}
-                    </option>
-                  ))}
-                </select>
-                <MapPin className="w-4 h-4 text-gray-500 absolute left-3.5 top-3 pointer-events-none" />
-              </div>
-            </div>
-
-            {/* Subscription Plan */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-300 mb-1.5">
-                نوع باقة الاشتراك <span className="text-red-400">*</span>
-              </label>
-              <div className="relative">
-                <select
-                  value={planId}
-                  onChange={(e) => setPlanId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-dark border border-surface-border text-sm text-white focus:outline-none focus:border-gym-500 transition-colors cursor-pointer"
-                >
-                  {mockPlans.map((plan) => (
-                    <option key={plan.id} value={plan.id}>
-                      {plan.name} ({plan.price_mru} MRU)
-                    </option>
-                  ))}
-                </select>
-                <Dumbbell className="w-4 h-4 text-gray-500 absolute left-3.5 top-3 pointer-events-none" />
-              </div>
-            </div>
-          </div>
-
-          {/* Payment Method Details */}
-          <div className="p-4 rounded-xl bg-surface-dark/70 border border-surface-border space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-gray-200">طريقة الدفع (مطلوبة)</span>
-              <span className="text-xs font-extrabold text-gym-400 bg-gym-500/10 px-2 py-0.5 rounded border border-gym-500/20">
-                المبلغ المستحق: {selectedPlan.price_mru} أوقية (MRU)
+        {/* Payment Method Details */}
+        <div className="p-4 rounded-xl bg-surface-dark/70 border border-surface-border space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+            <span className="text-xs font-bold text-gray-200">طريقة الدفع (مطلوبة)</span>
+            {selectedPlan && (
+              <span className="text-xs font-extrabold text-gym-400 bg-gym-500/10 px-2 py-0.5 rounded border border-gym-500/20 font-mono">
+                المبلغ: {selectedPlan.price_mru} MRU
               </span>
-            </div>
-
-            <div className="grid grid-cols-4 gap-2">
-              {[
-                { id: 'bankily', name: 'بنكيلي (Bankily)', color: 'border-emerald-500/40 text-emerald-300' },
-                { id: 'masrvi', name: 'مصرفي (Masrvi)', color: 'border-blue-500/40 text-blue-300' },
-                { id: 'sedad', name: 'سداد (Sedad)', color: 'border-amber-500/40 text-amber-300' },
-                { id: 'cash', name: 'نقداً (Espèces)', color: 'border-gray-500/40 text-gray-300' },
-              ].map((m) => (
-                <button
-                  type="button"
-                  key={m.id}
-                  onClick={() => setPaymentMethod(m.id as PaymentMethod)}
-                  className={`py-2 px-1 text-center text-xs font-semibold rounded-lg border transition-all ${
-                    paymentMethod === m.id
-                      ? 'bg-gym-500/20 border-gym-500 text-gym-400 ring-2 ring-gym-500/30 font-bold'
-                      : 'bg-surface-card border-surface-border text-gray-400 hover:text-white'
-                  }`}
-                >
-                  {m.name}
-                </button>
-              ))}
-            </div>
-
-            {paymentMethod !== 'cash' && (
-              <div>
-                <label className="block text-[11px] font-medium text-gray-400 mb-1">
-                  رقم إشعار أو مرجع العملية البنكية (اختياري)
-                </label>
-                <input
-                  type="text"
-                  placeholder="مثال: BNK-829141"
-                  value={transactionRef}
-                  onChange={(e) => setTransactionRef(e.target.value)}
-                  className="w-full px-3 py-1.5 rounded-lg bg-surface-card border border-surface-border text-xs text-white focus:outline-none focus:border-gym-500 font-mono"
-                  dir="ltr"
-                />
-              </div>
             )}
           </div>
 
-          {/* Action Buttons */}
-          <div className="pt-2 flex items-center justify-end gap-3 border-t border-surface-border">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2.5 rounded-xl border border-surface-border text-xs font-semibold text-gray-400 hover:text-white hover:bg-surface-border transition-all"
-            >
-              إلغاء
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-gym-600 to-gym-500 hover:from-gym-500 hover:to-gym-400 text-white text-xs font-bold shadow-lg shadow-gym-600/30 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
-            >
-              {isSubmitting ? (
-                <span>جاري الحفظ والتفعيل...</span>
-              ) : (
-                <>
-                  <CheckCircle className="w-4 h-4" />
-                  <span>تأكيد التسجيل وتفعيل الاشتراك</span>
-                </>
-              )}
-            </button>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {[
+              { id: 'bankily', name: 'بنكيلي (Bankily)' },
+              { id: 'masrvi', name: 'مصرفي (Masrvi)' },
+              { id: 'sedad', name: 'سداد (Sedad)' },
+              { id: 'cash', name: 'نقداً (Espèces)' },
+            ].map((m) => (
+              <button
+                type="button"
+                key={m.id}
+                onClick={() => setPaymentMethod(m.id as any)}
+                className={`min-h-[44px] py-2 px-1 text-center text-xs font-semibold rounded-xl border transition-all ${
+                  paymentMethod === m.id
+                    ? 'bg-gym-500/20 border-gym-500 text-gym-400 ring-2 ring-gym-500/30 font-bold'
+                    : 'bg-surface-card border-surface-border text-gray-400 hover:text-white'
+                }`}
+              >
+                {m.name}
+              </button>
+            ))}
           </div>
-        </form>
-      </div>
-    </div>
+
+          {paymentMethod !== 'cash' && (
+            <div>
+              <label className="block text-[11px] font-medium text-gray-400 mb-1">
+                رقم إشعار أو مرجع العملية البنكية (اختياري)
+              </label>
+              <input
+                type="text"
+                placeholder="مثال: BNK-829141"
+                value={transactionRef}
+                onChange={(e) => setTransactionRef(e.target.value)}
+                className="w-full min-h-[44px] px-3.5 py-2 rounded-xl bg-surface-card border border-surface-border text-xs text-white focus:outline-none focus:border-gym-500 font-mono"
+                dir="ltr"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Action Buttons */}
+        <div className="pt-2 flex items-center justify-end gap-3 border-t border-surface-border">
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-[44px] px-4 py-2.5 rounded-xl border border-surface-border text-xs font-semibold text-gray-400 hover:text-white hover:bg-surface-border transition-all"
+          >
+            إلغاء
+          </button>
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="min-h-[44px] flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-gym-600 to-gym-500 hover:from-gym-500 hover:to-gym-400 text-white text-xs font-bold shadow-lg shadow-gym-600/30 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+          >
+            {isSubmitting ? (
+              <span>جاري الحفظ والتفعيل...</span>
+            ) : (
+              <>
+                <CheckCircle className="w-4 h-4" />
+                <span>تأكيد التسجيل وتفعيل الاشتراك</span>
+              </>
+            )}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }

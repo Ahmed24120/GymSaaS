@@ -1,4 +1,18 @@
-import { Gym, Branch, Member, Plan, Subscription, Payment, Visit, AuditLog } from '@/types/database';
+import {
+  Gym,
+  Branch,
+  Member,
+  Plan,
+  Subscription,
+  Payment,
+  Visit,
+  AuditLog,
+  PlatformSubscription,
+  Advertisement,
+  GymStaff,
+  Profile
+} from '@/types/database';
+
 
 export const mockGym: Gym = {
   id: 'gym-001',
@@ -419,3 +433,249 @@ export const pilotTestAccounts = {
     title: 'مدير المنصة العام'
   }
 };
+
+// ==============================================================================
+// بيانات صاحب المنصة (Super Admin Datasets - الشاشات: 2، 17، 21)
+// ==============================================================================
+
+export const mockGymsList: Gym[] = [
+  {
+    id: 'gym-001',
+    name: 'صالة النخبة للرياضة والرشاقة (Elite Gym)',
+    slug: 'elite-gym',
+    city: 'نواكشوط (تفرغ زينة)',
+    status: 'active',
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z'
+  },
+  {
+    id: 'gym-002',
+    name: 'صالة القوة الحديدية (Iron Fitness)',
+    slug: 'iron-fitness',
+    city: 'نواكشوط (لكصر)',
+    status: 'active',
+    created_at: '2026-02-15T00:00:00Z',
+    updated_at: '2026-02-15T00:00:00Z'
+  },
+  {
+    id: 'gym-003',
+    name: 'مركز الأبطال الرياضي (Champions Center)',
+    slug: 'champions-center',
+    city: 'نواكشوط (عرفات)',
+    status: 'active',
+    created_at: '2026-03-01T00:00:00Z',
+    updated_at: '2026-03-01T00:00:00Z'
+  },
+  {
+    id: 'gym-004',
+    name: 'نادي تفرغ زينة للياقة (TZ Fitness Club)',
+    slug: 'tz-fitness-club',
+    city: 'نواكشوط (تفرغ زينة)',
+    status: 'active',
+    created_at: '2026-04-10T00:00:00Z',
+    updated_at: '2026-04-10T00:00:00Z'
+  },
+  {
+    id: 'gym-005',
+    name: 'أكاديمية الساحل الرياضية (Sahel Gym)',
+    slug: 'sahel-gym',
+    city: 'نواذيبو (المنطقة الحرة)',
+    status: 'trial',
+    created_at: '2026-10-01T00:00:00Z',
+    updated_at: '2026-10-01T00:00:00Z'
+  },
+  {
+    id: 'gym-006',
+    name: 'مركز السبخة لبناء الأجسام',
+    slug: 'sebkha-bodybuilding',
+    city: 'نواكشوط (السبخة)',
+    status: 'suspended',
+    created_at: '2026-01-20T00:00:00Z',
+    updated_at: '2026-09-15T00:00:00Z'
+  }
+];
+
+export const mockPlatformSubscriptions: PlatformSubscription[] = [
+  {
+    id: 'ps-001',
+    gym_id: 'gym-001',
+    amount: 3000, // 3,000 MRU شهرياً للمنصة
+    start_date: '2026-10-01T00:00:00Z',
+    end_date: '2026-10-31T23:59:59Z',
+    status: 'active',
+    gym: mockGymsList[0]
+  },
+  {
+    id: 'ps-002',
+    gym_id: 'gym-002',
+    amount: 3000,
+    start_date: '2026-10-01T00:00:00Z',
+    end_date: '2026-10-31T23:59:59Z',
+    status: 'active',
+    gym: mockGymsList[1]
+  },
+  {
+    id: 'ps-003',
+    gym_id: 'gym-003',
+    amount: 3000,
+    start_date: '2026-10-05T00:00:00Z',
+    end_date: '2026-11-04T23:59:59Z',
+    status: 'active',
+    gym: mockGymsList[2]
+  },
+  {
+    id: 'ps-004',
+    gym_id: 'gym-004',
+    amount: 3000,
+    start_date: '2026-09-15T00:00:00Z',
+    end_date: '2026-10-14T23:59:59Z',
+    status: 'suspended',
+    gym: mockGymsList[3]
+  },
+  {
+    id: 'ps-005',
+    gym_id: 'gym-005',
+    amount: 0,
+    start_date: '2026-10-01T00:00:00Z',
+    end_date: '2026-10-31T23:59:59Z',
+    status: 'trial',
+    gym: mockGymsList[4]
+  }
+];
+
+export const mockSuperAdminMetrics = {
+  totalGyms: 14,
+  activeGyms: 11,
+  trialGyms: 2,
+  suspendedGyms: 1,
+  totalPlatformMembers: 1248,
+  monthlyPlatformRevenueMRU: 33000, // 11 active gyms * 3,000 MRU
+  platformFeePerGymMRU: 3000,
+  activeAdsCount: 4
+};
+
+export const mockAdvertisements: Advertisement[] = [
+  {
+    id: 'ad-001',
+    title: 'تطبيق بنكيلي — ادفع اشتراكك الرياضي فوراً وبأمان',
+    content: 'ادفع اشتراك الصالة عبر بنكيلي واستفد من سحوبات شهرية على اشتراكات مجانية!',
+    image_url: 'https://images.unsplash.com/photo-1556742049-0a67e5572293?w=800',
+    link_url: 'https://bankily.mr',
+    start_date: '2026-10-01',
+    end_date: '2026-11-30',
+    status: 'active',
+    advertiser: 'بنك المعاملات الإسلامية (BIM - Bankily)',
+    views_count: 3420,
+    clicks_count: 418
+  },
+  {
+    id: 'ad-002',
+    title: 'بروتين ومكملات صحية معتمدة — متجر فتنس نواكشوط',
+    content: 'خصم 15% لمشتركي منصة GymSaaS على مكملات Whey Protein والكرياتين الأصلية.',
+    image_url: 'https://images.unsplash.com/photo-1579722821273-0f6c7d44362f?w=800',
+    link_url: 'https://fitness-nouakchott.mr',
+    start_date: '2026-09-15',
+    end_date: '2026-10-31',
+    status: 'active',
+    advertiser: 'Fitness Nutrition Mauritanie',
+    views_count: 5120,
+    clicks_count: 890
+  },
+  {
+    id: 'ad-003',
+    title: 'عصير طبيعي 100% بعد التمرين — ركن الطاقة',
+    content: 'استمتع بمشروب البروتين الطبيعي الطازج بعد كل تمرين عند فرع تفرغ زينة.',
+    image_url: 'https://images.unsplash.com/photo-1553530666-ba11a7da3888?w=800',
+    start_date: '2026-10-10',
+    end_date: '2026-11-10',
+    status: 'active',
+    advertiser: 'ركن الطاقة والعصائر الطبيعية',
+    views_count: 1840,
+    clicks_count: 215
+  }
+];
+
+export const mockStaffList: GymStaff[] = [
+  {
+    id: 'stf-001',
+    gym_id: 'gym-001',
+    user_id: 'usr-admin',
+    branch_id: 'br-001',
+    role: 'gym_owner',
+    permissions: {
+      can_manage_members: true,
+      can_manage_plans: true,
+      can_cancel_payments: true,
+      can_view_audit_logs: true,
+      can_manage_staff: true,
+      can_export_reports: true
+    },
+    is_active: true,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+    profile: {
+      id: 'usr-admin',
+      full_name: 'أحمد سالم ولد المصطفى',
+      phone: '+222 45 00 11 22',
+      language: 'ar',
+      is_super_admin: false,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z'
+    }
+  },
+  {
+    id: 'stf-002',
+    gym_id: 'gym-001',
+    user_id: 'usr-receptionist',
+    branch_id: 'br-001',
+    role: 'receptionist',
+    permissions: {
+      can_manage_members: true,
+      can_manage_plans: false, // لا يمكنه تغيير الأسعار طبقاً لـ AGENTS.md
+      can_cancel_payments: false, // لا يمكنه إلغاء المدفوعات نهائياً
+      can_view_audit_logs: false,
+      can_manage_staff: false,
+      can_export_reports: false
+    },
+    is_active: true,
+    created_at: '2026-02-01T00:00:00Z',
+    updated_at: '2026-02-01T00:00:00Z',
+    profile: {
+      id: 'usr-receptionist',
+      full_name: 'مريم بنت المختار (موظفة استقبال)',
+      phone: '+222 46 12 34 56',
+      language: 'ar',
+      is_super_admin: false,
+      created_at: '2026-02-01T00:00:00Z',
+      updated_at: '2026-02-01T00:00:00Z'
+    }
+  },
+  {
+    id: 'stf-003',
+    gym_id: 'gym-001',
+    user_id: 'usr-rec-2',
+    branch_id: 'br-002',
+    role: 'receptionist',
+    permissions: {
+      can_manage_members: true,
+      can_manage_plans: false,
+      can_cancel_payments: false,
+      can_view_audit_logs: false,
+      can_manage_staff: false,
+      can_export_reports: false
+    },
+    is_active: true,
+    created_at: '2026-03-01T00:00:00Z',
+    updated_at: '2026-03-01T00:00:00Z',
+    profile: {
+      id: 'usr-rec-2',
+      full_name: 'يعقوب ولد سيدي (استقبال فرع لكصر)',
+      phone: '+222 47 88 99 00',
+      language: 'ar',
+      is_super_admin: false,
+      created_at: '2026-03-01T00:00:00Z',
+      updated_at: '2026-03-01T00:00:00Z'
+    }
+  }
+];
+

@@ -13,6 +13,11 @@
     "start:web": "npm run start --workspace=@gymsaas/web"
   },
   "devDependencies": {
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "vitest": "^5.0.5"
+  },
+  "dependencies": {
+    "qrcode.react": "^4.2.0",
+    "xlsx": "^0.18.5"
   }
 }

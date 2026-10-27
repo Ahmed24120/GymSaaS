@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Bell, Clock, Plus, CreditCard, MapPin, LogOut } from 'lucide-react';
+import { Clock, Plus, CreditCard, LogOut } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { getBranches, BranchRecord } from '@/lib/data';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/components/common/Toast';
 
@@ -24,18 +23,8 @@ export default function Header({
   const { showToast } = useToast();
 
   const [time, setTime] = useState<string>('');
-  const [branches, setBranches] = useState<BranchRecord[]>([]);
-  const [selectedBranch, setSelectedBranch] = useState<string>('');
   const [isSigningOut, setIsSigningOut] = useState(false);
 
-  useEffect(() => {
-    getBranches().then((res) => {
-      if (res.ok && res.value.length > 0) {
-        setBranches(res.value);
-        setSelectedBranch(res.value[0].id);
-      }
-    });
-  }, []);
 
   useEffect(() => {
     const updateTime = () => {
@@ -69,6 +58,7 @@ export default function Header({
       }
       showToast({ type: 'success', title: 'تم تسجيل الخروج بنجاح.' });
       router.replace('/login');
+      router.refresh();
     } catch {
       showToast({ type: 'error', title: 'فشل تسجيل الخروج. حاول مجدداً.' });
       setIsSigningOut(false);
@@ -76,9 +66,9 @@ export default function Header({
   };
 
   return (
-    <header className="h-20 bg-surface-card/80 backdrop-blur-md border-b border-surface-border px-8 flex items-center justify-between sticky top-0 z-30">
+    <header className="min-h-20 bg-surface-card/80 backdrop-blur-md border-b border-surface-border px-3 py-3 sm:px-6 flex flex-wrap gap-3 items-center justify-between sticky top-0 z-30">
       {/* Title, Hamburger & Branch */}
-      <div className="flex items-center gap-3 sm:gap-6">
+      <div className="flex min-w-0 items-center gap-3 sm:gap-6">
         {/* Hamburger Menu for Mobile & Tablet */}
         <button
           onClick={() => window.dispatchEvent(new CustomEvent('toggle-sidebar'))}
@@ -91,31 +81,15 @@ export default function Header({
           </svg>
         </button>
 
-        <div>
+        <div className="min-w-0">
           <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">{title}</h2>
           {subtitle && <p className="text-xs text-gray-400 mt-0.5 hidden sm:block">{subtitle}</p>}
         </div>
 
-        {/* اختيار الفرع */}
-        <div className="hidden lg:flex items-center gap-2 bg-surface-dark px-3 py-1.5 rounded-xl border border-surface-border">
-          <MapPin className="w-3.5 h-3.5 text-gym-400" />
-          <select
-            value={selectedBranch}
-            onChange={(e) => setSelectedBranch(e.target.value)}
-            aria-label="اختيار الفرع"
-            className="bg-transparent text-xs text-gray-200 focus:outline-none cursor-pointer font-medium"
-          >
-            {branches.map((b) => (
-              <option key={b.id} value={b.id} className="bg-surface-card text-white">
-                {b.name}
-              </option>
-            ))}
-          </select>
-        </div>
       </div>
 
       {/* الأدوات على اليمين */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2">
         {/* الوقت الحي نواكشوط */}
         <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-surface-dark border border-surface-border text-xs text-gray-300">
           <Clock className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
@@ -143,15 +117,6 @@ export default function Header({
             <span>عضو جديد</span>
           </button>
         )}
-
-        {/* الإشعارات */}
-        <button
-          title="الإشعارات"
-          className="relative p-2.5 rounded-xl bg-surface-dark border border-surface-border text-gray-400 hover:text-white hover:border-gray-600 transition-all"
-        >
-          <Bell className="w-4 h-4" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-gym-500 ring-4 ring-surface-dark" />
-        </button>
 
         {/* تسجيل الخروج */}
         <button

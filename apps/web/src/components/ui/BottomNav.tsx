@@ -7,6 +7,7 @@ import { LayoutDashboard, QrCode, Users, CreditCard, Smartphone } from 'lucide-r
 
 export function BottomNav() {
   const pathname = usePathname();
+  if (!/^\/dashboard(?:\/|$)/.test(pathname)) return null;
 
   const navItems = [
     { href: '/dashboard', label: 'الرئيسية', icon: LayoutDashboard },

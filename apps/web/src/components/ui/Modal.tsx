@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useId } from 'react';
 import { X } from 'lucide-react';
 
 interface ModalProps {
@@ -21,19 +21,34 @@ export function Modal({
   maxWidth = 'md',
 }: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
 
   useEffect(() => {
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
+      if (e.key === 'Tab') {
+        const nodes = modalRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href]');
+        if (!nodes?.length) return;
+        const first = nodes[0];
+        const last = nodes[nodes.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
     };
 
     if (isOpen) {
       document.body.style.overflow = 'hidden';
       window.addEventListener('keydown', handleKeyDown);
+      modalRef.current?.querySelector<HTMLElement>('button, input, select, textarea')?.focus();
     }
 
     return () => {
-      document.body.style.overflow = 'unset';
+      if (isOpen) {
+        document.body.style.overflow = previousOverflow;
+        previousFocus?.focus();
+      }
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [isOpen, onClose]);
@@ -58,6 +73,7 @@ export function Modal({
       }}
       role="dialog"
       aria-modal="true"
+      aria-labelledby={titleId}
     >
       <div
         ref={modalRef}
@@ -67,7 +83,7 @@ export function Modal({
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-surface-border bg-surface-card shrink-0">
           <div>
-            <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">{title}</h3>
+            <h3 id={titleId} className="text-base sm:text-lg font-bold text-white tracking-tight">{title}</h3>
             {subtitle && <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>}
           </div>
           <button

@@ -42,9 +42,25 @@ import { Modal } from '@/components/ui/Modal';
 import { StatSkeleton, TableSkeleton } from '@/components/ui/Skeleton';
 import { StatCard } from '@/components/ui/StatCard';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { createClient } from '@/lib/supabase/client';
+import { useRouter } from 'next/navigation';
 
 export default function SuperAdminPage() {
   const { showToast } = useToast();
+  const router = useRouter();
+  const [signingOut, setSigningOut] = useState(false);
+  const signOut = async () => {
+    setSigningOut(true);
+    try {
+      const { error } = await createClient().auth.signOut();
+      if (error) throw error;
+      router.replace('/login');
+      router.refresh();
+    } catch {
+      showToast({ type: 'error', title: 'تعذر تسجيل الخروج. أعد المحاولة.' });
+      setSigningOut(false);
+    }
+  };
 
   const [gyms, setGyms] = useState<GymRecord[]>([]);
   const [subscriptions, setSubscriptions] = useState<PlatformSubRecord[]>([]);
@@ -79,7 +95,9 @@ export default function SuperAdminPage() {
     else setError(gRes.error.message);
 
     if (sRes.ok) setSubscriptions(sRes.value);
+    else setError(sRes.error.message);
     if (aRes.ok) setAds(aRes.value);
+    else setError(aRes.error.message);
 
     setLoading(false);
   };
@@ -207,13 +225,7 @@ export default function SuperAdminPage() {
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
               <span>تحديث</span>
             </button>
-            <Link
-              href="/dashboard"
-              className="px-4 py-2.5 rounded-xl bg-gym-500 hover:bg-gym-400 text-white font-bold text-xs flex items-center gap-1.5 min-h-[44px]"
-            >
-              <span>العودة للداشبورد</span>
-              <ArrowRight className="w-4 h-4" />
-            </Link>
+            <button type="button" onClick={signOut} disabled={signingOut} className="px-4 py-2.5 rounded-xl bg-gym-500 text-white font-bold text-xs min-h-[44px] disabled:opacity-50">{signingOut ? 'جارٍ تسجيل الخروج...' : 'تسجيل الخروج'}</button>
           </div>
         </div>
 
@@ -250,6 +262,7 @@ export default function SuperAdminPage() {
           ))}
         </div>
 
+        {error && <div role="alert" className="p-4 rounded-xl border border-rose-500 text-rose-300">{error}</div>}
         {/* Loading state */}
         {loading && <StatSkeleton />}
 
@@ -351,7 +364,14 @@ export default function SuperAdminPage() {
               <h3 className="font-bold text-sm text-white">اشتراكات الصالات في باقات المنصة (3,000 MRU / شهر)</h3>
             </div>
 
-            <div className="glass-panel rounded-2xl border border-surface-border overflow-hidden">
+            <div className="md:hidden space-y-3">
+              {subscriptions.map((sub) => <article key={sub.id} className="p-4 rounded-xl border border-surface-border text-xs space-y-2 break-words">
+                <p>{sub.gym?.name || 'اسم الصالة غير متاح'}</p><p>{sub.plan}</p>
+                <p>{sub.price_mru} MRU — {sub.period === 'monthly' ? 'شهري' : 'سنوي'}</p>
+                <p>{sub.status}</p><p>{new Date(sub.current_period_end).toLocaleDateString('ar-MR', { timeZone: 'Africa/Nouakchott' })}</p>
+              </article>)}
+            </div>
+            <div className="hidden md:block glass-panel rounded-2xl border border-surface-border overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-right text-xs">
                   <thead className="bg-surface-card text-gray-400 uppercase text-[11px] font-semibold border-b border-surface-border">

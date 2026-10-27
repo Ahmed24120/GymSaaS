@@ -6,6 +6,7 @@ import { formatMRU } from '@/lib/services/currency';
 import { formatDateNouakchott } from '@/lib/services/dateUtils';
 import { CheckCircle2, Share2, Printer, X, Dumbbell } from 'lucide-react';
 import { useToast } from '@/components/common/Toast';
+import { mauritaniaWhatsAppPhone } from '@/components/common/phone';
 
 interface ReceiptModalProps {
   payment: PaymentRecord | null;
@@ -21,8 +22,11 @@ export default function ReceiptModal({ payment, isOpen, onClose }: ReceiptModalP
 
   const handleShareWhatsApp = () => {
     if (!member) return;
-    const cleanPhone = member.phone.replace(/[^0-9]/g, '');
-    const targetPhone = cleanPhone.startsWith('222') ? cleanPhone : `222${cleanPhone}`;
+    const targetPhone = mauritaniaWhatsAppPhone(member.phone);
+    if (!targetPhone) {
+      showToast({ type: 'error', title: 'رقم الهاتف غير صالح لفتح واتساب' });
+      return;
+    }
     const text = encodeURIComponent(
       `🧾 *إيصال دفع رسمي — GymSaaS*\n` +
       `━━━━━━━━━━━━━━━━━━\n` +
@@ -34,7 +38,7 @@ export default function ReceiptModal({ payment, isOpen, onClose }: ReceiptModalP
       `━━━━━━━━━━━━━━━━━━\n` +
       `شكراً لثقتكم بنا، نتمنى لكم تدريباً ممتعاً!`
     );
-    window.open(`https://wa.me/${targetPhone}?text=${text}`, '_blank');
+    window.open(`https://wa.me/${targetPhone}?text=${text}`, '_blank', 'noopener,noreferrer');
     showToast({
       type: 'success',
       title: 'تم تجهيز الإيصال',
@@ -48,11 +52,14 @@ export default function ReceiptModal({ payment, isOpen, onClose }: ReceiptModalP
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
+      role="dialog"
+      aria-modal="true"
+      aria-label="إيصال الدفع"
+      className="receipt-overlay fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm rounded-3xl bg-surface-card border border-surface-border shadow-2xl overflow-hidden relative text-white text-right"
+        className="receipt-paper w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl bg-surface-card border border-surface-border shadow-2xl overflow-y-auto max-h-[95dvh] relative text-white text-right"
         onClick={(e) => e.stopPropagation()}
         dir="rtl"
       >
@@ -60,7 +67,7 @@ export default function ReceiptModal({ payment, isOpen, onClose }: ReceiptModalP
         <div className="p-6 bg-gradient-to-b from-surface-dark to-surface-card border-b border-surface-border text-center relative">
           <button
             onClick={onClose}
-            className="absolute left-4 top-4 p-2 rounded-full bg-surface-card text-gray-400 hover:text-white"
+            className="receipt-action absolute left-4 top-4 p-2 rounded-full bg-surface-card text-gray-400 hover:text-white"
             title="إغلاق"
             aria-label="إغلاق"
           >
@@ -132,7 +139,7 @@ export default function ReceiptModal({ payment, isOpen, onClose }: ReceiptModalP
         </div>
 
         {/* Receipt Actions */}
-        <div className="p-4 bg-surface-dark border-t border-surface-border flex gap-2">
+        <div className="receipt-action p-4 bg-surface-dark border-t border-surface-border flex gap-2">
           <button
             onClick={handleShareWhatsApp}
             className="w-1/2 min-h-[44px] py-2.5 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow"
@@ -149,6 +156,16 @@ export default function ReceiptModal({ payment, isOpen, onClose }: ReceiptModalP
           </button>
         </div>
       </div>
+      <style jsx global>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          .receipt-overlay, .receipt-overlay * { visibility: visible !important; }
+          .receipt-overlay { position: absolute !important; inset: 0 !important; display: block !important; padding: 0 !important; background: white !important; backdrop-filter: none !important; }
+          .receipt-paper { max-height: none !important; overflow: visible !important; max-width: none !important; box-shadow: none !important; }
+          .receipt-paper, .receipt-paper * { color: black !important; background: white !important; }
+          .receipt-action { display: none !important; }
+        }
+      `}</style>
     </div>
   );
 }

@@ -34,3 +34,10 @@ Thumbs.db
 *.swp
 *.swo
 *.tsbuildinfo
+
+# Local authenticated browser sessions and generated test reports
+apps/web/tests/.auth/
+apps/web/test-results/
+apps/web/playwright-report/
+.vercel/
+.tools/

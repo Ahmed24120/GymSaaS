@@ -8,6 +8,7 @@
     "packages/*"
   ],
   "scripts": {
+    "check": "npm run check --workspace=@gymsaas/web",
     "dev:web": "npm run dev --workspace=@gymsaas/web",
     "build:web": "npm run build --workspace=@gymsaas/web",
     "start:web": "npm run start --workspace=@gymsaas/web"
@@ -21,6 +22,6 @@
     "xlsx": "^0.18.5"
   },
   "engines": {
-    "node": ">=20.0.0 <23.0.0"
+    "node": "22.x"
   }
 }

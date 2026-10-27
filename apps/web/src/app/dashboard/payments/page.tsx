@@ -12,6 +12,8 @@ import { TableSkeleton } from '@/components/ui/Skeleton';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { StatCard } from '@/components/ui/StatCard';
 import { useToast } from '@/components/common/Toast';
+import { createClient } from '@/lib/supabase/client';
+import { resolveUserRole } from '@/lib/supabase/access';
 
 export default function PaymentsPage() {
   const { showToast } = useToast();
@@ -21,6 +23,18 @@ export default function PaymentsPage() {
   const [isRecordOpen, setIsRecordOpen] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<PaymentRecord | null>(null);
   const [receiptTarget, setReceiptTarget] = useState<PaymentRecord | null>(null);
+  const [canCancel, setCanCancel] = useState(false);
+
+  useEffect(() => {
+    const loadRole = async () => {
+      try {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) setCanCancel(await resolveUserRole(supabase, user.id) === 'gym_owner');
+      } catch { setCanCancel(false); }
+    };
+    void loadRole();
+  }, []);
 
   const fetchPaymentsList = useCallback(async () => {
     setIsLoading(true);
@@ -39,6 +53,7 @@ export default function PaymentsPage() {
 
   const handlePaymentRecorded = (newPayment: PaymentRecord) => {
     setPayments((prev) => [newPayment, ...prev]);
+    setReceiptTarget(newPayment);
   };
 
   const handlePaymentCancelled = (updatedPayment: PaymentRecord) => {
@@ -151,18 +166,18 @@ export default function PaymentsPage() {
           >
             الإيصال 🧾
           </button>
-          {p.status !== 'cancelled' ? (
+          {p.status !== 'cancelled' && canCancel ? (
             <button
               onClick={() => setCancelTarget(p)}
               className="min-h-[44px] px-2.5 py-1 rounded-lg text-xs font-bold text-rose-400 hover:bg-rose-500/15 border border-rose-500/30 transition-colors"
             >
               إلغاء محاسبي
             </button>
-          ) : (
+          ) : p.status === 'cancelled' ? (
             <span className="text-[10px] text-gray-500 italic max-w-[120px] truncate" title={p.cancellation_reason || ''}>
               {p.cancellation_reason || 'ملغي'}
             </span>
-          )}
+          ) : null}
         </div>
       ),
     },

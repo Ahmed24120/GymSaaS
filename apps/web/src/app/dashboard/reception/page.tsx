@@ -57,6 +57,7 @@ export default function ReceptionTerminalPage() {
   }>({});
 
   const [isRecordingVisit, setIsRecordingVisit] = useState(false);
+  const [entryRecorded, setEntryRecorded] = useState(false);
 
   // Quick Payment Modal state
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
@@ -93,6 +94,7 @@ export default function ReceptionTerminalPage() {
 
   // Handle manual member search
   const handleSearch = (query: string) => {
+    setEntryRecorded(false);
     setSearchQuery(query);
     const q = query.trim().toLowerCase();
     if (!q) {
@@ -112,7 +114,7 @@ export default function ReceptionTerminalPage() {
       setSelectedMember(found);
       const sub = found.active_subscription;
       const hasActiveSub =
-        sub &&
+        found.status === 'active' && sub &&
         sub.status === 'active' &&
         new Date(sub.end_date) > new Date();
 
@@ -143,6 +145,8 @@ export default function ReceptionTerminalPage() {
   const handleVerifyQRToken = async (tokenString: string) => {
     if (!tokenString.trim()) return;
     setIsScanningQR(true);
+    setSelectedMember(null);
+    setEntryRecorded(false);
     setVerificationResult('loading');
 
     try {
@@ -155,6 +159,7 @@ export default function ReceptionTerminalPage() {
       const data: QRVerifyResponse = await res.json();
 
       if (data.allowed) {
+        setEntryRecorded(true);
         setVerificationResult('valid');
         setVerificationDetails({
           planName: data.subscription.plan_name,
@@ -209,7 +214,7 @@ export default function ReceptionTerminalPage() {
 
   // Manual Check-in button
   const handleManualCheckIn = async () => {
-    if (!selectedMember) return;
+    if (!selectedMember || entryRecorded) return;
     setIsRecordingVisit(true);
 
     const res = await recordVisit({
@@ -218,6 +223,7 @@ export default function ReceptionTerminalPage() {
     });
 
     if (res.ok) {
+      setEntryRecorded(true);
       setRecentVisits((prev) => [res.value, ...prev].slice(0, 10));
       showToast({
         type: 'success',
@@ -304,6 +310,7 @@ export default function ReceptionTerminalPage() {
             <div className="relative flex-1">
               <input
                 type="text"
+                aria-label="البحث بالاسم أو الهاتف"
                 placeholder="ابحث بالاسم الكامل أو رقم الهاتف (مثال: 45112233)..."
                 value={searchQuery}
                 onChange={(e) => handleSearch(e.target.value)}
@@ -323,6 +330,7 @@ export default function ReceptionTerminalPage() {
             >
               <input
                 type="text"
+                aria-label="رمز QR"
                 placeholder="امسح أو الصق رمز الـ QR..."
                 value={qrTokenInput}
                 onChange={(e) => setQrTokenInput(e.target.value)}
@@ -341,7 +349,10 @@ export default function ReceptionTerminalPage() {
         </section>
 
         {/* DOMINANT VERIFICATION SCREEN (Readable from 3 meters away) */}
-        <section className="min-h-[320px] sm:min-h-[380px] rounded-3xl transition-all duration-300 flex flex-col items-center justify-center p-6 sm:p-10 text-center shadow-xl">
+        <section aria-live="polite" className={`${verificationResult === 'valid' || verificationResult === 'expired' ? 'fixed inset-0 z-40 overflow-y-auto bg-surface-dark' : 'min-h-[320px] sm:min-h-[380px] rounded-3xl'} transition-all duration-300 flex flex-col items-center p-4 sm:p-10 text-center shadow-xl`}>
+          {(verificationResult === 'valid' || verificationResult === 'expired') && (
+            <button type="button" onClick={() => { setVerificationResult('idle'); setSelectedMember(null); setSearchQuery(''); setEntryRecorded(false); }} className="min-h-[48px] mb-4 px-6 py-3 rounded-xl bg-surface-card border border-surface-border text-white">فحص عضو آخر</button>
+          )}
           {verificationResult === 'idle' && (
             <div className="glass-panel w-full h-full py-16 px-6 rounded-3xl border border-surface-border flex flex-col items-center justify-center space-y-4">
               <div className="w-20 h-20 rounded-3xl bg-surface-dark border border-surface-border flex items-center justify-center text-gym-400 shadow-inner">
@@ -401,11 +412,11 @@ export default function ReceptionTerminalPage() {
               <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
                 <button
                   onClick={handleManualCheckIn}
-                  disabled={isRecordingVisit}
+                  disabled={isRecordingVisit || entryRecorded}
                   className="px-6 py-3.5 bg-white text-emerald-800 hover:bg-emerald-50 rounded-2xl font-black text-sm flex items-center gap-2 shadow-lg min-h-[48px] transition-transform active:scale-95"
                 >
                   <UserCheck className="w-5 h-5 text-emerald-700" />
-                  <span>{isRecordingVisit ? 'جارِ التوثيق...' : 'تسجيل الدخول الآن'}</span>
+                  <span>{entryRecorded ? 'تم تسجيل الزيارة' : isRecordingVisit ? 'جارِ التوثيق...' : 'تسجيل الدخول الآن'}</span>
                 </button>
 
                 <button
@@ -425,7 +436,7 @@ export default function ReceptionTerminalPage() {
               <div className="flex flex-col items-center space-y-3">
                 <XCircle className="w-20 h-20 sm:w-28 sm:h-28 text-rose-200" />
                 <span className="px-4 py-1.5 rounded-full bg-rose-700/80 text-rose-100 text-xs sm:text-sm font-bold tracking-wider">
-                  الدخول مرفوض — الاشتراك منتهٍ ❌
+                  الدخول مرفوض ❌
                 </span>
                 <h2 className="text-2xl sm:text-4xl font-black tracking-tight">
                   {selectedMember ? selectedMember.full_name : 'مشترك غير مصرّح له'}
@@ -451,6 +462,9 @@ export default function ReceptionTerminalPage() {
                     <span>تجديد الاشتراك وسداد الرسوم الآن</span>
                   </button>
                 </div>
+              )}
+              {!selectedMember && (
+                <button type="button" onClick={() => { setVerificationResult('idle'); setSearchQuery(''); }} className="min-h-[52px] px-6 py-3 bg-white text-rose-800 rounded-2xl font-bold">تجديد الاشتراك — ابحث عن العضو أولاً</button>
               )}
             </div>
           )}

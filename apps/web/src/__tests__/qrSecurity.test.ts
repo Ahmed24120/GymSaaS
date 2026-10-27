@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeAll } from 'vitest';
+import { randomBytes } from 'node:crypto';
 
 beforeAll(() => {
   // Ensure test secret is set
-  process.env.QR_SIGNING_SECRET = 'tAGuFae7Pz6Q02/nu7BGlcjsgvcuH1yRiJEYLwDphnQ=';
+  process.env.QR_SIGNING_SECRET = randomBytes(32).toString('base64');
 });
 
 import { generateSignedQR, verifySignedQR } from '../lib/services/qrSecurity';

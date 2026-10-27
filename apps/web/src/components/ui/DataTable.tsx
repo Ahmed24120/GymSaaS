@@ -57,6 +57,7 @@ export function DataTable<T>({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={searchPlaceholder}
+                aria-label={searchPlaceholder}
                 className="w-full h-11 ps-10 pe-4 rounded-xl bg-surface-card border border-surface-border text-sm text-white placeholder-gray-500 focus:outline-none focus:border-gym-500 transition-colors"
               />
               <Search className="w-4 h-4 text-gray-400 absolute start-3.5 top-3.5 pointer-events-none" />
@@ -113,9 +114,9 @@ export function DataTable<T>({
                       <span className="text-gray-400 shrink-0 font-medium">
                         {col.mobileLabel || col.header}
                       </span>
-                      <span className="text-white text-end font-semibold overflow-hidden text-ellipsis">
+                      <div className="min-w-0 text-white text-end font-semibold break-words">
                         {col.render ? col.render(item) : (item as any)[col.key]}
-                      </span>
+                      </div>
                     </div>
                   ))}
               </div>

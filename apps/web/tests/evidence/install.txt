@@ -1,0 +1,22 @@
+Independent installation notes (2026-10-27)
+
+Initial requested npm ci in apps/web:
+- npm.ps1 blocked by PowerShell execution policy.
+- npm.cmd ci: exit 0, added 435 packages in 2m.
+- Subsequent check failed with missing vitest, xlsx and qrcode.react.
+
+Root/workspace install: exit 1, ERESOLVE: mobile React 18.2.0 conflicts with react-dom 18.3.1.
+No force or legacy-peer-deps used.
+
+Web-only install generated apps/web/package-lock.json and succeeded.
+An offline-only ci attempt failed with ENOTCACHED (type-fest).
+
+Final command (Node v22.23.4 running npm CLI):
+npm ci --workspaces=false --audit=false --fetch-retries=0 --fetch-timeout=15000
+Exit: 0
+Final stdout excerpt, not the full warning log:
+
+added 545 packages in 2m
+
+179 packages are looking for funding
+  run `npm fund` for details

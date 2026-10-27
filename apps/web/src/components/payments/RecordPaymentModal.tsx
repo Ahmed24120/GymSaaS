@@ -60,8 +60,8 @@ export default function RecordPaymentModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const intAmount = Math.round(Number(amountMRU));
-    if (isNaN(intAmount) || intAmount <= 0) {
+    const intAmount = Number(amountMRU);
+    if (!Number.isSafeInteger(intAmount) || intAmount <= 0) {
       showToast({ type: 'warning', title: 'يرجى إدخال مبلغ صحيح بالأوقية (MRU)' });
       return;
     }

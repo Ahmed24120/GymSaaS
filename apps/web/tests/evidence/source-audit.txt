@@ -1,0 +1,71 @@
+UTC: 2026-10-27T21:47:04.827Z
+HEAD: 86dd97753921bd54e65c0fb408730f471ead850b
+
+$ rg -n mockData apps/web/src
+exit=1
+
+
+$ rg -l --hidden -g !.git/** -g !**/node_modules/** -g !**/.next/** -g !.tools/** -g !apps/web/tests/evidence/** service_role .
+exit=0
+.\HANDOFF.md
+.\apps\mobile\.env.example
+.\AGENTS.md
+.\apps\web\tests\audit.mjs
+.\apps\mobile\src\services\supabase.ts
+.\TESTING.md
+.\PROGRESS.md
+
+
+$ git ls-files | findstr ".env"
+apps/mobile/.env.example
+apps/web/.env.example
+
+$ cat apps/web/src/lib/qr/contract.ts
+/**
+ * GymSaaS — QR Contract (Single Source of Truth)
+ * Importé par : /api/qr/route.ts, /api/qr/verify/route.ts, /mobile, /dashboard/reception, tests vitest
+ * Ne jamais dupliquer ces types ailleurs.
+ */
+
+/** Réponse de GET /api/qr?member_id=UUID */
+export interface QRTokenResponse {
+  token: string;
+  member_id: string;
+  gym_id: string;
+  expires_in: 30;
+  generated_at: string; // ISO 8601
+}
+
+/** Corps de POST /api/qr/verify */
+export interface QRVerifyRequest {
+  token: string;
+  branch_id?: string;
+}
+
+/** Réponse de POST /api/qr/verify — allowed=true */
+export interface QRVerifyAllowed {
+  allowed: true;
+  member: {
+    id: string;
+    full_name: string;
+    phone: string;
+  };
+  subscription: {
+    end_date: string;
+    plan_name: string;
+  };
+  visit_id: string;
+}
+
+/** Réponse de POST /api/qr/verify — allowed=false */
+export interface QRVerifyDenied {
+  allowed: false;
+  error: string;
+  errorCode: 'EXPIRED' | 'INVALID_SIGNATURE' | 'MALFORMED' | 'FUTURE_TIMESTAMP' | 'REPLAY' | 'INACTIVE_MEMBER' | 'NO_SUBSCRIPTION' | 'UNAUTHENTICATED' | 'SERVER_ERROR';
+}
+
+export type QRVerifyResponse = QRVerifyAllowed | QRVerifyDenied;
+
+
+Tracked files containing a privileged JWT (names only):
+count=0; limited scan, not a guarantee of absence of all secret formats

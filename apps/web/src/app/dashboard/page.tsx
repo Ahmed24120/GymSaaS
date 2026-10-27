@@ -29,6 +29,10 @@ import { StatSkeleton, TableSkeleton } from '@/components/ui/Skeleton';
 import AddMemberModal from '@/components/members/AddMemberModal';
 import RecordPaymentModal from '@/components/payments/RecordPaymentModal';
 import CancelPaymentModal from '@/components/payments/CancelPaymentModal';
+import ReceiptModal from '@/components/payments/ReceiptModal';
+import { createClient } from '@/lib/supabase/client';
+import { resolveUserRole } from '@/lib/supabase/access';
+import { mauritaniaWhatsAppPhone } from '@/components/common/phone';
 
 export default function DashboardPage() {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
@@ -38,6 +42,18 @@ export default function DashboardPage() {
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
   const [cancelModalPayment, setCancelModalPayment] = useState<PaymentRecord | null>(null);
+  const [receipt, setReceipt] = useState<PaymentRecord | null>(null);
+  const [canCancel, setCanCancel] = useState(false);
+  useEffect(() => {
+    const loadRole = async () => {
+      try {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) setCanCancel(await resolveUserRole(supabase, user.id) === 'gym_owner');
+      } catch { setCanCancel(false); }
+    };
+    void loadRole();
+  }, []);
 
   const fetchMetrics = async () => {
     setLoading(true);
@@ -60,6 +76,7 @@ export default function DashboardPage() {
   };
 
   const handlePaymentRecorded = (_newPayment: PaymentRecord) => {
+    setReceipt(_newPayment);
     fetchMetrics();
   };
 
@@ -346,7 +363,7 @@ export default function DashboardPage() {
                         غائب منذ {crm.daysInactive} يوماً
                       </span>
                       <a
-                        href={`https://wa.me/222${crm.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+                        href={`https://wa.me/${mauritaniaWhatsAppPhone(crm.phone)}?text=${encodeURIComponent(
                           `مرحباً ${crm.full_name}، لاحظنا غيابك عن الصالة منذ فترة! هل تحتاج إلى مساعدة أو تعديل جدول التمارين؟`
                         )}`}
                         target="_blank"
@@ -461,9 +478,9 @@ export default function DashboardPage() {
 
                   <div className="flex items-center justify-between sm:justify-end gap-3">
                     <span className="font-black text-white font-mono text-sm">
-                      {Math.round(pay.amount_mru).toLocaleString()} MRU
+                      {pay.amount_mru.toLocaleString()} MRU
                     </span>
-                    {pay.status === 'completed' && (
+                    {pay.status === 'completed' && canCancel && (
                       <button
                         onClick={() => setCancelModalPayment(pay)}
                         className="px-2.5 py-1 rounded-lg bg-surface-card border border-red-500/30 text-red-400 hover:bg-red-500/15 text-[11px] font-bold min-h-[36px]"
@@ -498,6 +515,7 @@ export default function DashboardPage() {
         onClose={() => setCancelModalPayment(null)}
         onSuccess={handlePaymentCancelled}
       />
+      <ReceiptModal payment={receipt} isOpen={!!receipt} onClose={() => setReceipt(null)} />
     </>
   );
 }

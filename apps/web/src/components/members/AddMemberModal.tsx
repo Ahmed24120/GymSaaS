@@ -8,6 +8,8 @@ import { recordPayment } from '@/lib/data/payments';
 import { getPlans, PlanRecord } from '@/lib/data/plans';
 import { getBranches, BranchRecord } from '@/lib/data/branches';
 import { useToast } from '@/components/common/Toast';
+import ReceiptModal from '@/components/payments/ReceiptModal';
+import type { PaymentRecord } from '@/lib/data/payments';
 
 interface AddMemberModalProps {
   isOpen: boolean;
@@ -28,6 +30,7 @@ export default function AddMemberModal({ isOpen, onClose, onSuccess }: AddMember
 
   const [branches, setBranches] = useState<BranchRecord[]>([]);
   const [plans, setPlans] = useState<PlanRecord[]>([]);
+  const [receipt, setReceipt] = useState<PaymentRecord | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -88,11 +91,12 @@ export default function AddMemberModal({ isOpen, onClose, onSuccess }: AddMember
         showToast({ type: 'error', title: 'تم تسجيل العضو لكن فشل تسجيل الدفعة: ' + payRes.error.message });
       } else {
         showToast({ type: 'success', title: 'تم تسجيل العضو وتفعيل الاشتراك بنجاح' });
+        setReceipt(payRes.value);
       }
 
       onSuccess({
         ...createdMember,
-        status: 'active',
+        status: payRes.ok ? 'active' : createdMember.status,
         active_subscription: payRes.ok && payRes.value.subscription ? {
           id: payRes.value.subscription.id,
           start_date: payRes.value.subscription.start_date,
@@ -115,6 +119,7 @@ export default function AddMemberModal({ isOpen, onClose, onSuccess }: AddMember
   };
 
   return (
+    <>
     <Modal
       isOpen={isOpen}
       onClose={onClose}
@@ -279,5 +284,7 @@ export default function AddMemberModal({ isOpen, onClose, onSuccess }: AddMember
         </div>
       </form>
     </Modal>
+    <ReceiptModal payment={receipt} isOpen={!!receipt} onClose={() => setReceipt(null)} />
+    </>
   );
 }

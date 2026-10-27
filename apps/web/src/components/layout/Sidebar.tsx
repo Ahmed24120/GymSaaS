@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
+import { canAccessPath, resolveUserRole, type UserRole } from '@/lib/supabase/access';
 import {
   LayoutDashboard,
   Users,
@@ -20,11 +22,6 @@ import {
   Crown,
   X,
 } from 'lucide-react';
-
-const gymInfo = {
-  name: 'صالة النخبة للرياضة (Elite Gym)',
-  city: 'نواكشوط (تفرغ زينة)',
-};
 
 const navItems = [
   { name: 'لوحة المؤشرات', href: '/dashboard', icon: LayoutDashboard },
@@ -44,6 +41,21 @@ const navItems = [
 export default function Sidebar() {
   const pathname = usePathname();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [role, setRole] = useState<UserRole | null>(null);
+  const [email, setEmail] = useState('');
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        setEmail(user.email || '');
+        setRole(await resolveUserRole(supabase, user.id));
+      } catch { setRole(null); }
+    };
+    void load();
+  }, []);
 
   useEffect(() => {
     const handleToggle = () => setIsMobileOpen((prev) => !prev);
@@ -85,8 +97,8 @@ export default function Sidebar() {
                   PRO
                 </span>
               </h1>
-              <p className="text-xs text-gray-400 font-medium truncate max-w-[150px]" title={gymInfo.name}>
-                {gymInfo.name}
+              <p className="text-xs text-gray-400 font-medium truncate max-w-[150px]">
+                إدارة الصالة الرياضية
               </p>
             </div>
           </div>
@@ -104,7 +116,7 @@ export default function Sidebar() {
         {/* Location Tag */}
         <div className="mt-3.5 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-dark border border-surface-border text-xs text-gray-300">
           <Building2 className="w-3.5 h-3.5 text-gym-400 shrink-0" />
-          <span className="truncate">{gymInfo.city}</span>
+          <span className="truncate">نواكشوط، موريتانيا</span>
         </div>
       </div>
 
@@ -114,7 +126,7 @@ export default function Sidebar() {
           القائمة الرئيسية
         </div>
 
-        {navItems.map((item) => {
+        {navItems.filter((item) => role && canAccessPath(role, item.href)).map((item) => {
           const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
           const Icon = item.icon;
 
@@ -139,7 +151,7 @@ export default function Sidebar() {
       </nav>
 
       {/* Super Admin Switcher Link */}
-      <div className="px-3 pb-2">
+      {role === 'super_admin' && <div className="px-3 pb-2">
         <Link
           href="/super-admin"
           className="flex items-center justify-between p-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-400 text-xs font-bold transition-all group min-h-[44px]"
@@ -150,7 +162,7 @@ export default function Sidebar() {
           </div>
           <ChevronLeft className="w-3.5 h-3.5 shrink-0" />
         </Link>
-      </div>
+      </div>}
 
       {/* User / Gym Owner Profile Box */}
       <div className="p-3 border-t border-surface-border bg-surface-dark/50">
@@ -160,8 +172,8 @@ export default function Sidebar() {
               أ
             </div>
             <div className="overflow-hidden">
-              <div className="text-xs font-bold text-white truncate">مالك الصالة</div>
-              <div className="text-[10px] text-gray-400 truncate">owner@elitegym.mr</div>
+              <div className="text-xs font-bold text-white truncate">{role === 'gym_owner' ? 'مالك الصالة' : role === 'receptionist' ? 'موظف الاستقبال' : 'حسابك'}</div>
+              <div className="text-[10px] text-gray-400 truncate">{email}</div>
             </div>
           </div>
         </div>

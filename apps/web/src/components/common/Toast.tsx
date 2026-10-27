@@ -63,7 +63,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={{ showToast, success, error, warning, info }}>
       {children}
       {/* Toast Render Container (RTL top-left in Mauritanian Arabic UI) */}
-      <div className="fixed top-6 left-6 z-50 flex flex-col gap-2.5 max-w-sm w-full pointer-events-none select-none">
+      <div aria-live="polite" className="fixed top-4 inset-x-4 sm:inset-x-auto sm:left-6 z-50 flex flex-col gap-2.5 sm:max-w-sm sm:w-full pointer-events-none select-none">
         {toasts.map((toast) => {
           let bgClass = 'bg-surface-card border-surface-border';
           let icon = <Info className="w-5 h-5 text-blue-400" />;

@@ -4,51 +4,11 @@ import React, { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Dumbbell, ArrowRight, Lock, Mail, AlertCircle } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { toAppError, type Result } from '@/lib/types/auth';
+import { toAppError } from '@/lib/types/auth';
+import { canAccessPath, homeForRole, resolveUserRole } from '@/lib/supabase/access';
 import { useToast } from '@/components/common/Toast';
 
 // ─── أنواع الأدوار (من migration: public.gym_staff.role enum) ────────────────
-type UserRole = 'super_admin' | 'gym_owner' | 'receptionist';
-interface RoleResult { role: UserRole }
-
-// ─── قراءة الدور من public.profiles + public.gym_staff ──────────────────────
-async function fetchUserRole(userId: string): Promise<Result<RoleResult>> {
-  try {
-    const supabase = createClient();
-
-    // 1. هل is_super_admin في public.profiles؟
-    const { data: profile, error: profileErr } = await supabase
-      .from('profiles')
-      .select('is_super_admin')
-      .eq('id', userId)
-      .single();
-
-    if (profileErr) return { ok: false, error: toAppError(profileErr) };
-    if (profile?.is_super_admin) return { ok: true, value: { role: 'super_admin' } };
-
-    // 2. اقرأ role من public.gym_staff حيث is_active = true
-    const { data: staffRow, error: staffErr } = await supabase
-      .from('gym_staff')
-      .select('role')
-      .eq('user_id', userId)
-      .eq('is_active', true)
-      .maybeSingle();
-
-    if (staffErr) return { ok: false, error: toAppError(staffErr) };
-
-    if (!staffRow) {
-      return {
-        ok: false,
-        error: { code: 'no_gym_staff_record', message: 'الحساب غير مرتبط بأي صالة. تواصل مع المشرف.' },
-      };
-    }
-
-    const role: UserRole = staffRow.role === 'gym_owner' ? 'gym_owner' : 'receptionist';
-    return { ok: true, value: { role } };
-  } catch (err) {
-    return { ok: false, error: toAppError(err) };
-  }
-}
 
 // ─── المكوّن الداخلي الذي يستخدم useSearchParams (يجب أن يكون داخل Suspense) ─
 function LoginForm() {
@@ -80,23 +40,19 @@ function LoginForm() {
         return;
       }
 
-      const roleResult = await fetchUserRole(data.user.id);
-
-      if (!roleResult.ok) {
-        showToast({ type: 'error', title: roleResult.error.message });
+      const role = await resolveUserRole(supabase, data.user.id);
+      if (!role) {
+        showToast({ type: 'error', title: 'تعذر التحقق من صلاحيات الحساب. تواصل مع المشرف.' });
         await supabase.auth.signOut();
         setIsLoading(false);
         return;
       }
 
-      const { role } = roleResult.value;
       const next = searchParams.get('next') ?? '';
-
-      if (role === 'super_admin') {
-        router.replace(next.startsWith('/super-admin') ? next : '/super-admin');
-      } else {
-        router.replace(next.startsWith('/dashboard') ? next : '/dashboard');
-      }
+      const safeNext = /^\/(dashboard|super-admin|mobile)(?:\/|$)/.test(next)
+        && !next.includes('\\') && canAccessPath(role, next);
+      router.replace(safeNext ? next : homeForRole(role));
+      router.refresh();
     } catch (err) {
       showToast({ type: 'error', title: toAppError(err).message });
       setIsLoading(false);
@@ -151,11 +107,12 @@ function LoginForm() {
       {/* نموذج الدخول */}
       <form onSubmit={handleLogin} className="space-y-4">
         <div>
-          <label className="block text-xs font-semibold text-gray-300 mb-1.5">
+          <label htmlFor="login-email" className="block text-xs font-semibold text-gray-300 mb-1.5">
             البريد الإلكتروني
           </label>
           <div className="relative">
             <input
+              id="login-email"
               type="email"
               required
               autoComplete="email"
@@ -169,11 +126,12 @@ function LoginForm() {
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-gray-300 mb-1.5">
+          <label htmlFor="login-password" className="block text-xs font-semibold text-gray-300 mb-1.5">
             كلمة المرور
           </label>
           <div className="relative">
             <input
+              id="login-password"
               type="password"
               required
               autoComplete="current-password"
@@ -204,7 +162,7 @@ function LoginForm() {
 
       {/* تذييل */}
       <div className="pt-4 border-t border-surface-border/60 text-center text-[11px] text-gray-400">
-        نظام محمي بسياسات RLS المدمجة مع Supabase
+        حسابك الشخصي لإدارة الصالة والاشتراك
       </div>
     </div>
   );

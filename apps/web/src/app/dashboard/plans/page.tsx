@@ -54,13 +54,19 @@ export default function PlansPage() {
   const handleCreatePlan = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPlanName.trim() || !newPlanPrice) return;
+    const price = Number(newPlanPrice);
+    const days = Number(newPlanDays);
+    if (!Number.isSafeInteger(price) || price <= 0 || !Number.isSafeInteger(days) || days <= 0) {
+      showToast({ type: 'warning', title: 'السعر والمدة يجب أن يكونا عددين صحيحين موجبين' });
+      return;
+    }
 
     setIsSubmitting(true);
     const res = await createPlan({
       name: newPlanName.trim(),
       description: newPlanDesc.trim() || undefined,
-      duration_days: parseInt(newPlanDays) || 30,
-      price_mru: Math.round(Number(newPlanPrice)),
+      duration_days: days,
+      price_mru: price,
     });
 
     if (res.ok) {

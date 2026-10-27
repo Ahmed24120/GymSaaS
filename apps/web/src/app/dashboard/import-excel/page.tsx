@@ -22,10 +22,10 @@ import {
   MemberRecord,
   getPlans,
   PlanRecord,
-  createMember,
-  recordPayment,
 } from '@/lib/data';
 import { useToast } from '@/components/common/Toast';
+import { persistMemberRows } from './importMembers';
+import { mauritaniaWhatsAppPhone } from '@/components/common/phone';
 
 interface ImportedRow {
   rowIndex: number;
@@ -75,7 +75,7 @@ export default function ExcelImportPage() {
   };
 
   const normalizePhone = (phoneStr: string): string => {
-    return phoneStr.replace(/[\s\-\(\)]/g, '').replace(/^(\+222|00222|222)/, '');
+    return mauritaniaWhatsAppPhone(phoneStr).replace(/^222/, '');
   };
 
   const parseExcelBuffer = async (buffer: ArrayBuffer, fileName: string) => {
@@ -235,48 +235,8 @@ export default function ExcelImportPage() {
     setIsImporting(true);
     setImportProgress(0);
 
-    let successCount = 0;
-    let failCount = 0;
-
-    for (let i = 0; i < validRows.length; i++) {
-      const row = validRows[i];
-
-      try {
-        // 1. Create Member
-        const mRes = await createMember({
-          full_name: row.fullName,
-          phone: row.phone,
-        });
-
-        if (!mRes.ok) {
-          row.status = 'failed';
-          row.failureReason = mRes.error.message;
-          failCount++;
-        } else {
-          // 2. Record Payment & activate subscription if plan exists
-          if (row.matchedPlan) {
-            await recordPayment({
-              member_id: mRes.value.id,
-              plan_id: row.matchedPlan.id,
-              duration_days: row.matchedPlan.duration_days,
-              amount_mru: row.matchedPlan.price_mru,
-              method: 'cash',
-              transaction_ref: 'EXCEL-IMPORT',
-            });
-          }
-
-          row.status = 'imported';
-          successCount++;
-        }
-      } catch (err: any) {
-        row.status = 'failed';
-        row.failureReason = err.message || 'خطأ غير متوقع';
-        failCount++;
-      }
-
-      setImportProgress(Math.round(((i + 1) / validRows.length) * 100));
-      setRows([...rows]);
-    }
+    const result = await persistMemberRows(rows, setImportProgress);
+    setRows(result.rows);
 
     setIsImporting(false);
     setIsImportComplete(true);
@@ -286,9 +246,9 @@ export default function ExcelImportPage() {
     if (mRes.ok) setExistingMembers(mRes.value);
 
     showToast({
-      type: successCount > 0 ? 'success' : 'error',
+      type: result.imported > 0 ? 'success' : 'error',
       title: 'اكتملت عملية الاستيراد',
-      message: `تم إدخال ${successCount} مشترك بنجاح. فشل: ${failCount}`,
+      message: `تم إدخال ${result.imported} مشترك بنجاح. فشل: ${result.failed}`,
     });
   };
 
@@ -308,6 +268,7 @@ export default function ExcelImportPage() {
         <div className="glass-panel p-5 sm:p-6 rounded-2xl border border-surface-border flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
             <h3 className="font-bold text-base text-white">إرشادات تنسيق ملف Excel</h3>
+            <p className="text-sm text-amber-300 mt-2">الاستيراد يحفظ الأعضاء فقط. سجّل الدفع وفعّل الاشتراك بعد التأكد من استلام المبلغ.</p>
             <p className="text-xs text-gray-400 mt-1 leading-relaxed max-w-2xl">
               يجب أن يحتوي الملف على الأعمدة التالية: <span className="text-gym-400 font-mono">full_name</span> (الاسم الكامل)،{' '}
               <span className="text-gym-400 font-mono">phone</span> (رقم الهاتف 8 أرقام)، و{' '}
@@ -360,7 +321,7 @@ export default function ExcelImportPage() {
           <div className="space-y-4">
             {/* Summary Bar */}
             <div className="glass-panel p-4 rounded-2xl border border-surface-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs">
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-4">
                 <span className="font-bold text-white">إجمالي الصفوف: {rows.length}</span>
                 <span className="text-emerald-400 font-bold flex items-center gap-1">
                   <CheckCircle2 className="w-4 h-4" />
@@ -397,7 +358,16 @@ export default function ExcelImportPage() {
             </div>
 
             {/* Table of Rows */}
-            <div className="glass-panel rounded-2xl border border-surface-border overflow-hidden">
+            <div className="md:hidden space-y-3">
+              {rows.map((row) => <article key={row.rowIndex} className="p-4 rounded-xl border border-surface-border space-y-2 break-words text-xs">
+                <p>#{row.rowIndex} — {row.fullName || 'اسم غير صالح'}</p>
+                <p dir="ltr">{row.phone || '—'}</p>
+                <p>{row.planName}</p>
+                <p className={row.status === 'failed' || !row.isValid ? 'text-rose-400' : 'text-emerald-400'}>{row.status === 'imported' ? 'تم الإدخال بنجاح' : row.status === 'failed' ? 'فشل الاستيراد' : row.isValid ? 'صالح للاستيراد' : 'مرفوض'}</p>
+                <p>{row.failureReason || 'مطابق للمعايير وبدون تكرار'}</p>
+              </article>)}
+            </div>
+            <div className="hidden md:block glass-panel rounded-2xl border border-surface-border overflow-hidden">
               <div className="overflow-x-auto max-h-[500px]">
                 <table className="w-full text-right text-xs">
                   <thead className="bg-surface-card text-gray-400 uppercase text-[11px] font-semibold border-b border-surface-border sticky top-0 z-10">
@@ -405,7 +375,7 @@ export default function ExcelImportPage() {
                       <th className="py-3 px-4">رقم الصف</th>
                       <th className="py-3 px-4">الاسم الكامل</th>
                       <th className="py-3 px-4">رقم الهاتف</th>
-                      <th className="py-3 px-4">الباقة المختارة</th>
+                      <th className="py-3 px-4">الباقة المقترحة</th>
                       <th className="py-3 px-4">حالة التدقيق</th>
                       <th className="py-3 px-4">ملاحظات وسبب الرفض</th>
                     </tr>
@@ -431,6 +401,8 @@ export default function ExcelImportPage() {
                             <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-[10px]">
                               تم الإدخال بنجاح ✅
                             </span>
+                          ) : row.status === 'failed' ? (
+                            <span className="text-rose-400 font-bold">فشل الاستيراد</span>
                           ) : row.isValid ? (
                             <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-[10px]">
                               صالح للاستيراد

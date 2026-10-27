@@ -1,0 +1,53 @@
+UTC: 2026-10-27T21:49:11.933Z
+Runtime: v22.23.4
+Command: C:\Users\hp\Desktop\GymSaaS\.tools\node22\node_modules\node\bin\node.exe node_modules/next/dist/bin/next build
+Exit: 0
+
+  ▲ Next.js 14.2.35
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/22) ...
+   Generating static pages (5/22) 
+   Generating static pages (10/22) 
+   Generating static pages (16/22) 
+ ✓ Generating static pages (22/22)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                              Size     First Load JS
+┌ ○ /                                    142 B          87.5 kB
+├ ○ /_not-found                          142 B          87.5 kB
+├ ○ /403                                 178 B          96.2 kB
+├ ƒ /api/qr                              0 B                0 B
+├ ƒ /api/qr/verify                       0 B                0 B
+├ ○ /dashboard                           7.6 kB          191 kB
+├ ○ /dashboard/audit                     5.41 kB         166 kB
+├ ○ /dashboard/branches                  7.18 kB         164 kB
+├ ○ /dashboard/import-excel              146 kB          306 kB
+├ ○ /dashboard/members                   4.35 kB         175 kB
+├ ○ /dashboard/payments                  4.86 kB         177 kB
+├ ○ /dashboard/plans                     7.53 kB         164 kB
+├ ○ /dashboard/reception                 8.43 kB         169 kB
+├ ○ /dashboard/reports                   6.71 kB         167 kB
+├ ○ /dashboard/staff                     6.07 kB         163 kB
+├ ○ /dashboard/visits                    9.94 kB         171 kB
+├ ○ /login                               4.34 kB         161 kB
+├ ○ /manifest.webmanifest                0 B                0 B
+├ ○ /mobile                              11.3 kB         180 kB
+└ ○ /super-admin                         7.37 kB         168 kB
++ First Load JS shared by all            87.3 kB
+  ├ chunks/117-1f248debfc9fd197.js       31.7 kB
+  ├ chunks/fd9d1056-51c851f7a4ad7ea3.js  53.6 kB
+  └ other shared chunks (total)          1.95 kB
+
+
+ƒ Middleware                             85 kB
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: Unable to snapshot resolve dependencies
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: Unable to snapshot resolve dependencies

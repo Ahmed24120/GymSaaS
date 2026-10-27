@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,11 +7,11 @@ import {
   ScrollView,
   Animated,
   Dimensions,
-  Image,
+  ActivityIndicator,
 } from 'react-native';
 import QRCodeDisplay from '../components/QRCodeDisplay';
-import { generateDynamicQRToken, mockMembersDB } from '../services/qrSecurity';
-import { Member } from '../types';
+import { fetchSignedQRToken } from '../services/qrApi';
+import { supabase } from '../services/supabase';
 
 const { width } = Dimensions.get('window');
 
@@ -19,26 +19,68 @@ interface MemberQRScreenProps {
   memberId?: string;
 }
 
-export default function MemberQRScreen({ memberId = 'mem-001' }: MemberQRScreenProps) {
-  const member: Member = mockMembersDB[memberId] || mockMembersDB['mem-001'];
-
+export default function MemberQRScreen({ memberId = 'd0000000-0000-0000-0000-000000000001' }: MemberQRScreenProps) {
   const [qrToken, setQrToken] = useState<string>('');
   const [secondsLeft, setSecondsLeft] = useState<number>(30);
-  const progressAnim = React.useRef(new Animated.Value(1)).current;
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [memberName, setMemberName] = useState<string>('محمد الأمين ولد فال');
+  const [planName, setPlanName] = useState<string>('اشتراك شهري (1 شهر)');
+  const [isSubActive, setIsSubActive] = useState<boolean>(true);
 
-  // Function to refresh the dynamic QR token
-  const refreshQR = () => {
-    const newToken = generateDynamicQRToken(member.id, member.gym_id);
-    setQrToken(newToken);
-    setSecondsLeft(30);
+  const progressAnim = useRef(new Animated.Value(1)).current;
 
-    // Reset and trigger smooth animation
-    progressAnim.setValue(1);
-    Animated.timing(progressAnim, {
-      toValue: 0,
-      duration: 30000,
-      useNativeDriver: false,
-    }).start();
+  // 1. Charge les détails du membre depuis Supabase (si disponible)
+  useEffect(() => {
+    let isMounted = true;
+    async function loadMember() {
+      try {
+        const { data: mData } = await supabase
+          .from('members')
+          .select('id, full_name, status, subscriptions(status, plan:plans(name))')
+          .eq('id', memberId)
+          .maybeSingle();
+
+        if (mData && isMounted) {
+          setMemberName(mData.full_name);
+          const subs = (mData as any).subscriptions || [];
+          const activeSub = subs.find((s: any) => s.status === 'active') || subs[0];
+          if (activeSub) {
+            setPlanName(activeSub.plan?.name || 'اشتراك قياسي');
+            setIsSubActive(activeSub.status === 'active');
+          }
+        }
+      } catch {
+        // Fallback transparent aux données par défaut
+      }
+    }
+    loadMember();
+    return () => {
+      isMounted = false;
+    };
+  }, [memberId]);
+
+  // 2. Récupère le QR signé via l'API REST de GymSaaS
+  const refreshQR = async () => {
+    setLoading(true);
+    setError(null);
+    const result = await fetchSignedQRToken(memberId);
+
+    if (result.success && result.data) {
+      setQrToken(result.data.token);
+      setSecondsLeft(30);
+
+      // Réinitialise l'animation du compte à rebours (30s)
+      progressAnim.setValue(1);
+      Animated.timing(progressAnim, {
+        toValue: 0,
+        duration: 30000,
+        useNativeDriver: false,
+      }).start();
+    } else {
+      setError(result.error || 'تعذر جلب رمز الـ QR من الخادم');
+    }
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -55,7 +97,7 @@ export default function MemberQRScreen({ memberId = 'mem-001' }: MemberQRScreenP
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [member.id]);
+  }, [memberId]);
 
   const progressBarWidth = progressAnim.interpolate({
     inputRange: [0, 1],
@@ -64,24 +106,24 @@ export default function MemberQRScreen({ memberId = 'mem-001' }: MemberQRScreenP
 
   return (
     <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-      {/* Top Header */}
+      {/* En-tête */}
       <View style={styles.header}>
-        <Text style={styles.gymTitle}>{member.gym_name}</Text>
-        <Text style={styles.branchSubtitle}>{member.branch_name}</Text>
+        <Text style={styles.gymTitle}>GymSaaS Nouakchott</Text>
+        <Text style={styles.branchSubtitle}>الفرع الرئيسي — تفرغ زينة</Text>
       </View>
 
-      {/* Main Dynamic QR Card */}
+      {/* Carte QR principale */}
       <View style={styles.qrCard}>
-        {/* Anti-Screenshot Live Security Watermark */}
+        {/* En-tête de sécurité */}
         <View style={styles.securityHeader}>
           <View style={styles.liveIndicator}>
             <View style={styles.liveDot} />
-            <Text style={styles.liveText}>رمز دخول مباشر (Live)</Text>
+            <Text style={styles.liveText}>رمز دخول مباشر (HMAC)</Text>
           </View>
           <Text style={styles.timerText}>يتجدد خلال {secondsLeft} ثانية</Text>
         </View>
 
-        {/* Dynamic Animated ProgressBar */}
+        {/* Barre de progression 30s */}
         <View style={styles.progressTrack}>
           <Animated.View
             style={[
@@ -94,61 +136,79 @@ export default function MemberQRScreen({ memberId = 'mem-001' }: MemberQRScreenP
           />
         </View>
 
-        {/* Dynamic QR Container */}
+        {/* Contenu QR / Loading / Error */}
         <View style={styles.qrWrapper}>
-          {qrToken ? <QRCodeDisplay value={qrToken} size={width * 0.58} /> : null}
+          {loading && !qrToken ? (
+            <View style={styles.centerState}>
+              <ActivityIndicator size="large" color="#22c55e" />
+              <Text style={styles.stateText}>جاري إنشاء رمز دخول مشفر...</Text>
+            </View>
+          ) : error && !qrToken ? (
+            <View style={styles.centerState}>
+              <Text style={styles.errorIcon}>⚠️</Text>
+              <Text style={styles.errorTitle}>تعذر الاتصال بخادم الـ QR</Text>
+              <Text style={styles.errorSubtitle}>{error}</Text>
+              <TouchableOpacity
+                style={styles.retryButton}
+                onPress={refreshQR}
+                accessibilityRole="button"
+                accessibilityLabel="إعادة المحاولة"
+              >
+                <Text style={styles.retryButtonText}>إعادة المحاولة</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <QRCodeDisplay value={qrToken} size={width * 0.55} />
+          )}
         </View>
 
-        {/* Member Quick Badge */}
-        <View style={styles.memberInfoRow}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{member.full_name.charAt(0)}</Text>
-          </View>
-          <View style={styles.memberTextCol}>
-            <Text style={styles.memberName}>{member.full_name}</Text>
-            <Text style={styles.memberPhone}>{member.phone}</Text>
-          </View>
-          <View style={styles.statusBadge}>
-            <Text style={styles.statusBadgeText}>اشتراك نشط</Text>
+        {/* Informations de l'adhérent */}
+        <View style={styles.memberInfo}>
+          <Text style={styles.memberName}>{memberName}</Text>
+          <Text style={styles.memberPlan}>{planName}</Text>
+          <View
+            style={[
+              styles.badge,
+              isSubActive ? styles.badgeActive : styles.badgeInactive,
+            ]}
+          >
+            <Text
+              style={[
+                styles.badgeText,
+                isSubActive ? styles.badgeTextActive : styles.badgeTextInactive,
+              ]}
+            >
+              {isSubActive ? 'اشتراك سارٍ ✅' : 'منتهي الصلاحية ❌'}
+            </Text>
           </View>
         </View>
 
-        {/* Manual Refresh CTA */}
-        <TouchableOpacity style={styles.refreshButton} onPress={refreshQR} activeOpacity={0.8}>
-          <Text style={styles.refreshButtonText}>تحديث الرمز يدوياً</Text>
+        {/* Bouton de renouvellement manuel (Touch target >= 44px) */}
+        <TouchableOpacity
+          style={styles.refreshButton}
+          onPress={refreshQR}
+          disabled={loading}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="تحديث الرمز الآن"
+        >
+          <Text style={styles.refreshButtonText}>
+            {loading ? 'جاري التحديث...' : '🔄 تحديث الرمز الآن'}
+          </Text>
         </TouchableOpacity>
       </View>
 
-      {/* Subscription Details Card */}
-      <View style={styles.detailsCard}>
-        <Text style={styles.detailsTitle}>تفاصيل الاشتراك الحالي</Text>
-
-        <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>نوع الباقة:</Text>
-          <Text style={styles.detailValue}>{member.plan_name}</Text>
-        </View>
-
-        <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>تاريخ الانتهاء:</Text>
-          <Text style={[styles.detailValue, { color: '#22c55e' }]}>
-            {new Date(member.end_date).toLocaleDateString('ar-MR', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-            })}
-          </Text>
-        </View>
-
-        <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>معرف العضوية:</Text>
-          <Text style={[styles.detailValue, { fontFamily: 'monospace' }]}>{member.id}</Text>
-        </View>
-      </View>
-
-      {/* Anti-Fraud Notice */}
-      <View style={styles.noticeBox}>
-        <Text style={styles.noticeText}>
-          يحتوي هذا الرمز على تشفير خادمي موقّع ضد لقطات الشاشة لحماية حسابك ولن يتم قبوله عند انتهاء العداد.
+      {/* Guide d'utilisation */}
+      <View style={styles.instructionsCard}>
+        <Text style={styles.instructionsTitle}>💡 تعليمات الدخول السريع:</Text>
+        <Text style={styles.instructionsBody}>
+          1. وجّه شاشة هاتفك نحو كاميرا محطة الاستقبال عند مدخل الصالة.
+        </Text>
+        <Text style={styles.instructionsBody}>
+          2. يتجدد الرمز تلقائياً كل 30 ثانية بتقنية التشفير HMAC لحماية حسابك من التزوير.
+        </Text>
+        <Text style={styles.instructionsBody}>
+          3. في حال وجود ضعف في الاتصال، اضغط على زر "تحديث الرمز الآن".
         </Text>
       </View>
     </ScrollView>
@@ -157,31 +217,29 @@ export default function MemberQRScreen({ memberId = 'mem-001' }: MemberQRScreenP
 
 const styles = StyleSheet.create({
   scrollContainer: {
-    padding: 20,
+    padding: 16,
+    paddingBottom: 36,
     alignItems: 'center',
-    backgroundColor: '#0b0f17',
-    minHeight: '100%',
   },
   header: {
+    marginBottom: 16,
     alignItems: 'center',
-    marginBottom: 20,
-    marginTop: 10,
   },
   gymTitle: {
     fontSize: 20,
     fontWeight: '900',
     color: '#ffffff',
     textAlign: 'center',
-    letterSpacing: 0.5,
   },
   branchSubtitle: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#9ca3af',
     marginTop: 4,
     textAlign: 'center',
   },
   qrCard: {
     width: '100%',
+    maxWidth: 380,
     backgroundColor: '#111827',
     borderRadius: 24,
     padding: 20,
@@ -189,174 +247,186 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1f2937',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.4,
-    shadowRadius: 20,
-    elevation: 10,
+    shadowRadius: 10,
+    elevation: 8,
   },
   securityHeader: {
+    width: '100%',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    width: '100%',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   liveIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(34, 197, 94, 0.1)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(34, 197, 94, 0.25)',
   },
   liveDot: {
-    width: 7,
-    height: 7,
+    width: 8,
+    height: 8,
     borderRadius: 4,
     backgroundColor: '#22c55e',
     marginRight: 6,
   },
   liveText: {
-    fontSize: 11,
-    color: '#22c55e',
+    fontSize: 12,
     fontWeight: '700',
+    color: '#22c55e',
   },
   timerText: {
-    fontSize: 12,
-    color: '#f59e0b',
-    fontWeight: '700',
-    fontFamily: 'monospace',
+    fontSize: 11,
+    color: '#9ca3af',
+    fontWeight: '600',
   },
   progressTrack: {
     width: '100%',
-    height: 6,
+    height: 4,
     backgroundColor: '#1f2937',
-    borderRadius: 3,
+    borderRadius: 2,
     overflow: 'hidden',
-    marginBottom: 20,
+    marginBottom: 18,
   },
   progressBar: {
     height: '100%',
-    borderRadius: 3,
   },
   qrWrapper: {
-    padding: 8,
-    borderRadius: 20,
+    width: width * 0.65,
+    height: width * 0.65,
+    maxWidth: 260,
+    maxHeight: 260,
     backgroundColor: '#ffffff',
-    marginBottom: 20,
-  },
-  memberInfoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
-    backgroundColor: '#0b0f17',
-    padding: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#1f2937',
-    marginBottom: 14,
-  },
-  avatar: {
-    width: 40,
-    height: 40,
     borderRadius: 20,
-    backgroundColor: '#22c55e',
+    padding: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#22c55e',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 5,
+  },
+  centerState: {
     alignItems: 'center',
     justifyContent: 'center',
+    padding: 12,
   },
-  avatarText: {
+  stateText: {
+    fontSize: 11,
+    color: '#4b5563',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  errorIcon: {
+    fontSize: 28,
+    marginBottom: 6,
+  },
+  errorTitle: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#ef4444',
+    textAlign: 'center',
+  },
+  errorSubtitle: {
+    fontSize: 10,
+    color: '#6b7280',
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  retryButton: {
+    marginTop: 10,
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 16,
+    minHeight: 44,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  retryButtonText: {
     color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '900',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
-  memberTextCol: {
-    flex: 1,
-    marginHorizontal: 12,
+  memberInfo: {
+    marginTop: 18,
+    alignItems: 'center',
   },
   memberName: {
-    color: '#ffffff',
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '800',
-    textAlign: 'right',
+    color: '#ffffff',
+    textAlign: 'center',
   },
-  memberPhone: {
+  memberPlan: {
+    fontSize: 12,
     color: '#9ca3af',
-    fontSize: 11,
-    fontFamily: 'monospace',
-    textAlign: 'right',
+    marginTop: 2,
+    textAlign: 'center',
   },
-  statusBadge: {
-    backgroundColor: 'rgba(34, 197, 94, 0.15)',
-    paddingHorizontal: 8,
+  badge: {
+    marginTop: 8,
+    paddingHorizontal: 12,
     paddingVertical: 4,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
+  },
+  badgeActive: {
+    backgroundColor: 'rgba(34, 197, 94, 0.15)',
     borderColor: 'rgba(34, 197, 94, 0.3)',
   },
-  statusBadgeText: {
-    color: '#4ade80',
-    fontSize: 10,
-    fontWeight: '800',
+  badgeInactive: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  badgeTextActive: {
+    color: '#22c55e',
+  },
+  badgeTextInactive: {
+    color: '#ef4444',
   },
   refreshButton: {
+    marginTop: 18,
     width: '100%',
+    minHeight: 44, // Touch target >= 44px
     backgroundColor: '#1f2937',
-    paddingVertical: 12,
     borderRadius: 14,
-    alignItems: 'center',
     borderWidth: 1,
     borderColor: '#374151',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   refreshButtonText: {
-    color: '#ffffff',
+    color: '#e5e7eb',
     fontSize: 13,
     fontWeight: '700',
   },
-  detailsCard: {
+  instructionsCard: {
     width: '100%',
-    backgroundColor: '#111827',
-    borderRadius: 20,
-    padding: 18,
+    maxWidth: 380,
     marginTop: 16,
+    backgroundColor: '#111827',
+    borderRadius: 18,
+    padding: 16,
     borderWidth: 1,
     borderColor: '#1f2937',
   },
-  detailsTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#ffffff',
-    marginBottom: 12,
+  instructionsTitle: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#22c55e',
+    marginBottom: 6,
     textAlign: 'right',
   },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1f2937',
-  },
-  detailLabel: {
-    fontSize: 12,
-    color: '#9ca3af',
-  },
-  detailValue: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#f3f4f6',
-  },
-  noticeBox: {
-    marginTop: 16,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: 'rgba(31, 41, 55, 0.5)',
-  },
-  noticeText: {
+  instructionsBody: {
     fontSize: 11,
-    color: '#6b7280',
-    textAlign: 'center',
-    lineHeight: 16,
+    color: '#9ca3af',
+    lineHeight: 18,
+    textAlign: 'right',
+    marginTop: 2,
   },
 });

@@ -15,7 +15,7 @@ export interface SignedQRToken {
 }
 
 export function getQRSecret(): string {
-  const secret = process.env.QR_SIGNING_SECRET || process.env.NEXT_PUBLIC_QR_SIGNING_SECRET;
+  const secret = process.env.QR_SIGNING_SECRET;
   if (!secret) {
     throw new Error('QR_SIGNING_SECRET is not configured on the server');
   }

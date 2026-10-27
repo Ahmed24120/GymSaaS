@@ -8,12 +8,13 @@ import {
   StatusBar,
 } from 'react-native';
 import MemberQRScreen from './src/screens/MemberQRScreen';
-import ReceptionistScannerScreen from './src/screens/ReceptionistScannerScreen';
-import MemberOnboardingScreen from './src/screens/MemberOnboardingScreen';
-import FitnessCalculatorScreen from './src/screens/FitnessCalculatorScreen';
-import WorkoutTimerScreen from './src/screens/WorkoutTimerScreen';
+import SubscriptionScreen from './src/screens/SubscriptionScreen';
+import VisitsHistoryScreen from './src/screens/VisitsHistoryScreen';
+import GoalsStreakScreen from './src/screens/GoalsStreakScreen';
+import AnnouncementsScreen from './src/screens/AnnouncementsScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
 
-type TabId = 'qr' | 'onboarding' | 'fitness' | 'timer' | 'scanner';
+type TabId = 'qr' | 'subscription' | 'visits' | 'goals' | 'announcements' | 'profile';
 
 interface TabConfig {
   id: TabId;
@@ -22,11 +23,12 @@ interface TabConfig {
 }
 
 const TABS: TabConfig[] = [
-  { id: 'qr',         icon: '📲', label: 'رمز QR'   },
-  { id: 'onboarding', icon: '🆕', label: 'اشترك'    },
-  { id: 'fitness',    icon: '📊', label: 'لياقة'    },
-  { id: 'timer',      icon: '⏱',  label: 'مؤقت'    },
-  { id: 'scanner',    icon: '📷', label: 'الاستقبال' },
+  { id: 'qr',            icon: '📲', label: 'الرمز QR'    },
+  { id: 'subscription',  icon: '💳', label: 'الاشتراك'    },
+  { id: 'visits',        icon: '🕒', label: 'الزيارات'    },
+  { id: 'goals',         icon: '🎯', label: 'الـ Streak'  },
+  { id: 'announcements', icon: '📢', label: 'الإعلانات'  },
+  { id: 'profile',       icon: '👤', label: 'الملف'       },
 ];
 
 export default function App() {
@@ -35,17 +37,19 @@ export default function App() {
   const renderScreen = () => {
     switch (activeTab) {
       case 'qr':
-        return <MemberQRScreen memberId="mem-001" />;
-      case 'onboarding':
-        return <MemberOnboardingScreen />;
-      case 'fitness':
-        return <FitnessCalculatorScreen />;
-      case 'timer':
-        return <WorkoutTimerScreen />;
-      case 'scanner':
-        return <ReceptionistScannerScreen gymId="gym-001" />;
+        return <MemberQRScreen />;
+      case 'subscription':
+        return <SubscriptionScreen />;
+      case 'visits':
+        return <VisitsHistoryScreen />;
+      case 'goals':
+        return <GoalsStreakScreen />;
+      case 'announcements':
+        return <AnnouncementsScreen />;
+      case 'profile':
+        return <ProfileScreen onLogout={() => setActiveTab('qr')} />;
       default:
-        return null;
+        return <MemberQRScreen />;
     }
   };
 
@@ -53,26 +57,26 @@ export default function App() {
     <SafeAreaView style={styles.safeContainer}>
       <StatusBar barStyle="light-content" backgroundColor="#0b0f17" />
 
-      {/* Main Content */}
+      {/* Contenu principal */}
       <View style={styles.content}>{renderScreen()}</View>
 
-      {/* Bottom Tab Bar */}
+      {/* Barre de navigation inférieure (Touch targets >= 44px) */}
       <View style={styles.tabBar}>
         {TABS.map((tab) => {
           const isActive = activeTab === tab.id;
-          // تمييز تبويب الاستقبال بلون مختلف (دور آخر)
-          const isScanner = tab.id === 'scanner';
           return (
             <TouchableOpacity
               key={tab.id}
               style={styles.tabItem}
               onPress={() => setActiveTab(tab.id)}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={tab.label}
             >
               <View
                 style={[
                   styles.tabIconContainer,
-                  isActive && (isScanner ? styles.tabIconActiveScanner : styles.tabIconActive),
+                  isActive && styles.tabIconActive,
                 ]}
               >
                 <Text style={styles.tabIcon}>{tab.icon}</Text>
@@ -80,7 +84,7 @@ export default function App() {
               <Text
                 style={[
                   styles.tabLabel,
-                  isActive && (isScanner ? styles.tabLabelActiveScanner : styles.tabLabelActive),
+                  isActive && styles.tabLabelActive,
                 ]}
               >
                 {tab.label}
@@ -108,44 +112,40 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#1f2937',
     paddingBottom: 6,
-    paddingTop: 6,
-    paddingHorizontal: 4,
+    paddingTop: 4,
+    paddingHorizontal: 2,
+    minHeight: 56, // Hauteur conforme pour l'accessibilité
   },
   tabItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 4,
+    minHeight: 44, // Touch target >= 44px
+    minWidth: 44,
+    paddingVertical: 2,
   },
   tabIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 2,
   },
   tabIconActive: {
-    backgroundColor: 'rgba(34, 197, 94, 0.15)',
-  },
-  tabIconActiveScanner: {
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    backgroundColor: 'rgba(34, 197, 94, 0.2)',
   },
   tabIcon: {
-    fontSize: 20,
+    fontSize: 16,
   },
   tabLabel: {
-    fontSize: 10,
-    color: '#6b7280',
+    fontSize: 9,
+    color: '#9ca3af',
     fontWeight: '600',
     textAlign: 'center',
   },
   tabLabelActive: {
     color: '#22c55e',
-    fontWeight: '900',
-  },
-  tabLabelActiveScanner: {
-    color: '#ef4444',
     fontWeight: '900',
   },
 });

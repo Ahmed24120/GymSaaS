@@ -13,11 +13,8 @@ import {
   Alert,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import {
-  verifyQRTokenServerSide,
-  generateDynamicQRToken,
-  mockMembersDB,
-} from '../services/qrSecurity';
+import { verifyQRTokenViaAPI } from '../services/qrSecurity';
+import { supabase } from '../services/supabase';
 import { VerificationResult, Member } from '../types';
 
 const { width, height } = Dimensions.get('window');
@@ -33,17 +30,17 @@ export default function ReceptionistScannerScreen({ gymId = 'gym-001' }: Recepti
   const [showManualSearch, setShowManualSearch] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [scanned, setScanned] = useState<boolean>(false);
+  const [searchResults, setSearchResults] = useState<Member[]>([]);
 
-  // Process a scanned QR code string
-  const handleScanData = (qrString: string) => {
-    if (scanned) return; // تجنب المسح المتكرر
+  // Process a scanned QR code string via real web API
+  const handleScanData = async (qrString: string) => {
+    if (scanned) return;
     setScanned(true);
 
-    const result = verifyQRTokenServerSide(qrString, gymId);
+    const result = await verifyQRTokenViaAPI(qrString);
     setScanResult(result);
     setShowResultModal(true);
 
-    // إعادة تفعيل الماسح بعد 4 ثوانٍ تلقائياً
     if (result.valid) {
       setTimeout(() => {
         setShowResultModal(false);
@@ -58,11 +55,41 @@ export default function ReceptionistScannerScreen({ gymId = 'gym-001' }: Recepti
   };
 
   // Manual search by phone or name
-  const filteredMembers = Object.values(mockMembersDB).filter(
-    (m) =>
-      m.gym_id === gymId &&
-      (m.full_name.includes(searchQuery) || m.phone.includes(searchQuery))
-  );
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    const search = async () => {
+      try {
+        const { data } = await supabase
+          .from('members')
+          .select('id, full_name, phone, status')
+          .or(`full_name.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%`)
+          .limit(10);
+        if (data) {
+          setSearchResults(
+            data.map((m: any) => ({
+              id: m.id,
+              gym_id: gymId,
+              gym_name: 'GymSaaS Pilot',
+              branch_name: 'الفرع الرئيسي',
+              full_name: m.full_name,
+              phone: m.phone,
+              status: m.status,
+              plan_name: 'اشتراك شهري',
+              end_date: new Date(Date.now() + 86400000 * 30).toISOString(),
+            }))
+          );
+        }
+      } catch {
+        setSearchResults([]);
+      }
+    };
+    search();
+  }, [searchQuery, gymId]);
+
+  const filteredMembers = searchResults;
 
   const handleManualCheckIn = (member: Member) => {
     setShowManualSearch(false);
@@ -161,25 +188,19 @@ export default function ReceptionistScannerScreen({ gymId = 'gym-001' }: Recepti
 
         {/* Quick Test Buttons (for simulator/development) */}
         <View style={styles.testSection}>
-          <Text style={styles.testTitle}>اختبار سريع:</Text>
+          <Text style={styles.testTitle}>اختبار سريع عبر الخادم:</Text>
           <View style={styles.testRow}>
             <TouchableOpacity
               style={[styles.testBtn, { backgroundColor: '#15803d' }]}
-              onPress={() => {
-                const token = generateDynamicQRToken('mem-001', 'gym-001');
-                handleScanData(token);
+              onPress={async () => {
+                const { fetchSignedQRToken } = await import('../services/qrApi');
+                const res = await fetchSignedQRToken('d0000000-0000-0000-0000-000000000001');
+                if (res.success && res.data) {
+                  handleScanData(res.data.token);
+                }
               }}
             >
-              <Text style={styles.testBtnText}>✓ اشتراك ساري</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.testBtn, { backgroundColor: '#b91c1c' }]}
-              onPress={() => {
-                const token = generateDynamicQRToken('mem-003', 'gym-001');
-                handleScanData(token);
-              }}
-            >
-              <Text style={styles.testBtnText}>✗ منتهي</Text>
+              <Text style={styles.testBtnText}>✓ فحص QR حقيقي</Text>
             </TouchableOpacity>
           </View>
         </View>

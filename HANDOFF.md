@@ -1,8 +1,9 @@
 # GymSaaS — Protocole de Passage de Relais (HANDOFF.md)
 
-**Dernière mise à jour :** 2026-10-27  
+**Date et Heure :** 2026-10-27 09:40 UTC  
+**Commit Hash :** `f972774`  
+**Branche source :** `ag/work`  
 **Auteur :** Antigravity (Constructeur)  
-**Branche active :** `ag/work`  
 
 ---
 

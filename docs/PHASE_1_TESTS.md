@@ -71,3 +71,26 @@ SELECT public.has_staff_permission('<GYM_UUID>', 'can_cancel_payments');
 ```
 
 RPC الإلغاء: `public.cancel_payment(p_payment_id uuid,p_reason text)`؛ يلزم سبب بثلاثة أحرف على الأقل وصلاحية المالك، ويُفرض author والتوقيت خادميًا. التدقيق تلقائي في المعاملة نفسها؛ لاDELETE للدفع ولاINSERT/UPDATE/DELETE مباشرة للتدقيق. تعديل السعر مقيد بالمالك عبرRLS. [04-sql-local.txt](evidence/phase1/04-sql-local.txt) يسجل18 حالة ناجحة محليًا، تشمل سبب الإلغاء والمنفذ فيaudit ورفض الإلغاء من الاستقبال. لا إثبات على Supabase بعد.
+
+## 05 — معاملة الدفع
+
+نفّذ `05_record_payment_rpc.sql`. إذا فشل التحقق من علاقة تاريخية بين صالتين، يتراجع الملف نفسه؛ لا تحذف السجلات ولا تتجاوز التحقق. تبقى الملفات السابقة مطبقة، وتبقى Preview متوقفة حتى معالجة السبب.
+
+العقد: `record_payment(p_member_id uuid,p_plan_id uuid,p_amount_mru integer,p_method payment_method,p_transaction_ref text DEFAULT NULL,p_branch_id uuid DEFAULT NULL)` يعيدJSON للدفع مع العضو والاشتراك والباقة والمحصل. **لا gym_id أوstart/end من العميل**. المدة مأخوذة من الباقة الحالية بالأيام؛ التجديد يبدأ من آخر نهاية فعالة أو الآن، ويُحسب في `Africa/Nouakchott`. المشغلات الأصلية تكتب التدقيق في المعاملة نفسها.
+
+```sql
+BEGIN;
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','<OWNER_OR_ALLOWED_RECEPTION_UUID>',true);
+SELECT public.record_payment(
+    p_member_id => '<MEMBER_UUID>', p_plan_id => '<PLAN_UUID>',
+    p_amount_mru => 1500, p_method => 'cash', p_transaction_ref => 'TEST_ONLY'
+);
+SET CONSTRAINTS ALL IMMEDIATE;
+SELECT id,amount_mru,recorded_by FROM public.payments WHERE member_id='<MEMBER_UUID>';
+ROLLBACK;
+```
+
+للكسر أرسل1500.5 كما هو دون تحويله إلىinteger أولًا؛ المتوقع خطأ نوع/إدخال ولا كتابات. لا تختبر بقيمة تم تقريبها قبل وصولها للدالة. الصفر والسالب يرفضان بـ22023. `SECURITY INVOKER` يبقي RLS فعالة. مشغلات مؤجلة تمنع اشتراكًا بلا دفع وتفعيلًا جديدًا بلا اشتراك مدفوع. الربط القديم الذي ينشئ الاشتراك في طلب منفصل سيفشل حتى المرحلة2، وهذا مقصود.
+
+[05-sql-local.txt](evidence/phase1/05-sql-local.txt):29 حالة محلية ناجحة. شمل الاختبار أخطاء قسرية عند إدخال الدفع وبعد إدخال الدفع والتدقيق أثناء التفعيل؛ جميع العدادات وحالة العضو عادت كما كانت. لا اختبارات تزامن متعددة الاتصالات ولاPostgREST حقيقي ولاقاعدة Supabase في هذا الدليل.

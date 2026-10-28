@@ -1,0 +1,195 @@
+UTC: 2026-10-28T07:02:03.865Z
+Step: 05
+Phase 1 exception: exactly five existing failures allowed; no app/test source changes.
+npm run check exit=1
+
+> @gymsaas/web@0.1.0 check
+> tsc --noEmit && next lint && vitest run && next build
+
+✔ No ESLint warnings or errors
+
+ RUN  v5.0.5 C:/Users/hp/Desktop/GymSaaS/apps/web
+
+ ❯ src/__tests__/qrReleaseGates.test.ts (5 tests | 3 failed) 22ms
+   ❯ QR release gates — real route with stubbed database responses (5)
+     × BUG-QR-01: denies entry when persistent nonce storage is missing 7ms
+     × BUG-QR-01: denies entry when nonce insertion is forbidden 1ms
+     × BUG-QR-02: denies entry when visit insertion fails 2ms
+ ❯ src/__tests__/paymentReleaseGates.test.ts (2 tests | 2 failed) 12ms
+   ❯ Payment release gates — stubbed persistence, no real transactions (2)
+     × BUG-PAY-01: does not leave an activated subscription after payment rejection 9ms
+     × BUG-PAY-02: rejects fractional MRU without activating subscription 1ms
+
+ Test Files  2 failed | 8 passed (10)
+      Tests  5 failed | 49 passed (54)
+   Start at  07:00:44
+   Duration  1.76s (import 45%, tests 21%, transform 19%, worker 14%)
+
+    Isolate  10 workers spawned · ~106ms startup each (spawn + environment, per file)
+             at least ~954ms faster with isolate: false — reuses workers across files instead of one per file
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/paymentReleaseGates.test.ts > Payment release gates — stubbed persistence, no real transactions > BUG-PAY-01: does not leave an activated subscription after payment rejection
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/__tests__/paymentReleaseGates.test.ts:26:29
+     24|     state.paymentFails = true;
+     25|     expect((await pay()).ok).toBe(false);
+     26|     expect(state.activated).toBe(false);
+       |                             ^
+     27|   });
+     28|   it('BUG-PAY-02: rejects fractional MRU without activating subscripti…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  src/__tests__/paymentReleaseGates.test.ts > Payment release gates — stubbed persistence, no real transactions > BUG-PAY-02: rejects fractional MRU without activating subscription
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/__tests__/paymentReleaseGates.test.ts:29:36
+     27|   });
+     28|   it('BUG-PAY-02: rejects fractional MRU without activating subscripti…
+     29|     expect((await pay(1500.5)).ok).toBe(false);
+       |                                    ^
+     30|     expect(state.activated).toBe(false);
+     31|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  src/__tests__/qrReleaseGates.test.ts > QR release gates — real route with stubbed database responses > BUG-QR-01: denies entry when persistent nonce storage is missing
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/__tests__/qrReleaseGates.test.ts:35:53
+     33|   it('BUG-QR-01: denies entry when persistent nonce storage is missing…
+     34|     backend.nonceError = { code: 'PGRST205' };
+     35|     expect((await (await verify()).json()).allowed).toBe(false);
+       |                                                     ^
+     36|   });
+     37|   it('BUG-QR-01: denies entry when nonce insertion is forbidden', asyn…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  src/__tests__/qrReleaseGates.test.ts > QR release gates — real route with stubbed database responses > BUG-QR-01: denies entry when nonce insertion is forbidden
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/__tests__/qrReleaseGates.test.ts:39:53
+     37|   it('BUG-QR-01: denies entry when nonce insertion is forbidden', asyn…
+     38|     backend.nonceError = { code: '42501' };
+     39|     expect((await (await verify()).json()).allowed).toBe(false);
+       |                                                     ^
+     40|   });
+     41|   it('BUG-QR-02: denies entry when visit insertion fails', async () =>…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  src/__tests__/qrReleaseGates.test.ts > QR release gates — real route with stubbed database responses > BUG-QR-02: denies entry when visit insertion fails
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/__tests__/qrReleaseGates.test.ts:43:53
+     41|   it('BUG-QR-02: denies entry when visit insertion fails', async () =>…
+     42|     backend.visitError = { code: '42501' };
+     43|     expect((await (await verify()).json()).allowed).toBe(false);
+       |                                                     ^
+     44|   });
+     45| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+npm error Lifecycle script `check` failed with error:
+npm error code 1
+npm error path C:\Users\hp\Desktop\GymSaaS\apps\web
+npm error workspace @gymsaas/web@0.1.0
+npm error location C:\Users\hp\Desktop\GymSaaS\apps\web
+npm error command failed
+npm error command C:\WINDOWS\system32\cmd.exe /d /s /c tsc --noEmit && next lint && vitest run && next build
+
+tsc --noEmit exit=0
+
+
+next lint exit=0
+✔ No ESLint warnings or errors
+
+
+next build exit=0
+  ▲ Next.js 14.2.35
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/22) ...
+   Generating static pages (5/22) 
+   Generating static pages (10/22) 
+   Generating static pages (16/22) 
+ ✓ Generating static pages (22/22)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                              Size     First Load JS
+┌ ○ /                                    142 B          87.5 kB
+├ ○ /_not-found                          142 B          87.5 kB
+├ ○ /403                                 178 B          96.2 kB
+├ ƒ /api/qr                              0 B                0 B
+├ ƒ /api/qr/verify                       0 B                0 B
+├ ○ /dashboard                           7.6 kB          191 kB
+├ ○ /dashboard/audit                     5.41 kB         166 kB
+├ ○ /dashboard/branches                  7.18 kB         164 kB
+├ ○ /dashboard/import-excel              146 kB          306 kB
+├ ○ /dashboard/members                   4.35 kB         175 kB
+├ ○ /dashboard/payments                  4.86 kB         177 kB
+├ ○ /dashboard/plans                     7.53 kB         164 kB
+├ ○ /dashboard/reception                 8.43 kB         169 kB
+├ ○ /dashboard/reports                   6.71 kB         167 kB
+├ ○ /dashboard/staff                     6.07 kB         163 kB
+├ ○ /dashboard/visits                    9.94 kB         171 kB
+├ ○ /login                               4.34 kB         161 kB
+├ ○ /manifest.webmanifest                0 B                0 B
+├ ○ /mobile                              11.3 kB         180 kB
+└ ○ /super-admin                         7.37 kB         168 kB
++ First Load JS shared by all            87.3 kB
+  ├ chunks/117-1f248debfc9fd197.js       31.7 kB
+  ├ chunks/fd9d1056-51c851f7a4ad7ea3.js  53.6 kB
+  └ other shared chunks (total)          1.95 kB
+
+
+ƒ Middleware                             85 kB
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: Unable to snapshot resolve dependencies
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: Unable to snapshot resolve dependencies
+
+Expected five failures only: true

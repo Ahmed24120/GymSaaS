@@ -1,0 +1,15 @@
+UTC 2026-10-28T08:47:16.163Z
+LOCAL PGlite only; emulated Auth, no Supabase connection.
+DAMAGE: DROP TRIGGER trg_calculate_subscription_end_date ON public.subscriptions
+SQL: SELECT tgname,tgtype,tgenabled,pg_get_triggerdef(oid) AS definition FROM pg_trigger WHERE tgrelid='public.subscriptions'::regclass AND tgname='trg_calculate_subscription_end_date'
+[{"tgname":"trg_calculate_subscription_end_date","tgtype":7,"tgenabled":"O","definition":"CREATE TRIGGER trg_calculate_subscription_end_date BEFORE INSERT ON public.subscriptions FOR EACH ROW EXECUTE FUNCTION calculate_subscription_end_date()"}]
+PASS repair missing trigger
+DAMAGE: DROP TRIGGER trg_calculate_subscription_end_date ON public.subscriptions; CREATE TRIGGER trg_calculate_subscription_end_date AFTER INSERT ON public.subscriptions FOR EACH ROW EXECUTE FUNCTION public.calculate_subscription_end_date()
+SQL: SELECT tgname,tgtype,tgenabled,pg_get_triggerdef(oid) AS definition FROM pg_trigger WHERE tgrelid='public.subscriptions'::regclass AND tgname='trg_calculate_subscription_end_date'
+[{"tgname":"trg_calculate_subscription_end_date","tgtype":7,"tgenabled":"O","definition":"CREATE TRIGGER trg_calculate_subscription_end_date BEFORE INSERT ON public.subscriptions FOR EACH ROW EXECUTE FUNCTION calculate_subscription_end_date()"}]
+PASS repair wrong timing trigger
+DAMAGE: ALTER TABLE public.subscriptions DISABLE TRIGGER trg_calculate_subscription_end_date
+SQL: SELECT tgname,tgtype,tgenabled,pg_get_triggerdef(oid) AS definition FROM pg_trigger WHERE tgrelid='public.subscriptions'::regclass AND tgname='trg_calculate_subscription_end_date'
+[{"tgname":"trg_calculate_subscription_end_date","tgtype":7,"tgenabled":"O","definition":"CREATE TRIGGER trg_calculate_subscription_end_date BEFORE INSERT ON public.subscriptions FOR EACH ROW EXECUTE FUNCTION calculate_subscription_end_date()"}]
+PASS repair disabled trigger
+TRIGGER AUDIT RESULT: 3 passed, 0 failed

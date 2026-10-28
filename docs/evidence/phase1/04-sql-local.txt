@@ -1,0 +1,134 @@
+UTC: 2026-10-28T06:55:29.323Z
+LOCAL PGlite PostgreSQL only. Auth emulated; not Supabase/PostgREST proof. No network database used.
+Engine: [{"version":"PostgreSQL 18.6 (PGlite 0.5.12) on wasm32-unknown-emscripten, compiled by emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 3.1.74 (1092ec30a3fb1d46b1782ff1b4db5094d3d06ae5), 32-bit"}]
+APPLY 01_profiles_lockdown (twice, idempotence)
+APPLY 02_qr_nonces_hardening (twice, idempotence)
+APPLY 03_gym_status_guard (twice, idempotence)
+APPLY 04_permissions_enforcement (twice, idempotence)
+SQL: UPDATE public.profiles SET is_super_admin=true WHERE id=$1
+fixture parameters: ["10000000-0000-0000-0000-000000000001"]
+ERROR 42501: ADMIN_FLAG_CHANGE_FORBIDDEN
+ROLLBACK after SQLSTATE 42501: ADMIN_FLAG_CHANGE_FORBIDDEN
+PASS 01 own profile cannot elevate to super admin
+SQL: UPDATE public.profiles SET full_name='Owner renamed' WHERE id=$1 RETURNING full_name
+fixture parameters: ["10000000-0000-0000-0000-000000000001"]
+{"rows":[{"full_name":"Owner renamed"}],"fields":[{"name":"full_name","dataTypeID":25}],"command":"UPDATE","affectedRows":1,"rowCount":1}
+PASS 01 normal profile fields remain editable
+SQL: UPDATE public.profiles SET is_super_admin=true WHERE id=$1
+fixture parameters: ["10000000-0000-0000-0000-000000000004"]
+{"rows":[],"fields":[],"command":"UPDATE","affectedRows":1,"rowCount":1}
+SQL: UPDATE public.profiles SET is_super_admin=false WHERE id=$1
+fixture parameters: ["10000000-0000-0000-0000-000000000004"]
+{"rows":[],"fields":[],"command":"UPDATE","affectedRows":1,"rowCount":1}
+PASS 01 existing super admin can change flag
+SQL: SELECT id FROM public.members WHERE id=$1
+fixture parameters: ["40000000-0000-0000-0000-000000000001"]
+{"rows":[{"id":"40000000-0000-0000-0000-000000000001"}],"fields":[{"name":"id","dataTypeID":2950}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: SELECT id FROM public.members WHERE id=$1
+fixture parameters: ["40000000-0000-0000-0000-000000000001"]
+{"rows":[{"id":"40000000-0000-0000-0000-000000000001"}],"fields":[{"name":"id","dataTypeID":2950}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 03 active gym data visible to staff and own member
+SQL: UPDATE public.gyms SET status='suspended' WHERE id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+ERROR 42501: GYM_STATUS_ADMIN_ONLY
+ROLLBACK after SQLSTATE 42501: GYM_STATUS_ADMIN_ONLY
+PASS 03 owner cannot change platform gym status
+SQL: SELECT public.is_gym_staff($1,$2) AS allowed
+fixture parameters: ["20000000-0000-0000-0000-000000000002","10000000-0000-0000-0000-000000000004"]
+{"rows":[{"allowed":false}],"fields":[{"name":"allowed","dataTypeID":16}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 03 cannot impersonate another user in membership helper
+SQL: UPDATE public.gyms SET status='suspended' WHERE id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[],"command":"UPDATE","affectedRows":1,"rowCount":1}
+SQL: SELECT public.is_gym_staff($1) AS allowed
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[{"allowed":false}],"fields":[{"name":"allowed","dataTypeID":16}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: SELECT public.is_gym_member($1) AS allowed
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[{"allowed":false}],"fields":[{"name":"allowed","dataTypeID":16}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 03 suspended staff/member helpers deny access
+SQL: SELECT id FROM public.members WHERE gym_id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[{"name":"id","dataTypeID":2950}],"command":"SELECT","affectedRows":0,"rowCount":0}
+SQL: SELECT id FROM public.visits WHERE gym_id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[{"name":"id","dataTypeID":2950}],"command":"SELECT","affectedRows":0,"rowCount":0}
+SQL: SELECT id FROM public.members WHERE gym_id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[{"name":"id","dataTypeID":2950}],"command":"SELECT","affectedRows":0,"rowCount":0}
+SQL: SELECT id FROM public.visits WHERE gym_id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[{"name":"id","dataTypeID":2950}],"command":"SELECT","affectedRows":0,"rowCount":0}
+PASS 03 old member self-read policy cannot bypass suspension
+SQL: SELECT id FROM public.gyms WHERE id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[{"id":"20000000-0000-0000-0000-000000000001"}],"fields":[{"name":"id","dataTypeID":2950}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 03 super admin retains management access to suspended gym
+SQL: UPDATE public.gyms SET status='active' WHERE id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[],"command":"UPDATE","affectedRows":1,"rowCount":1}
+SQL: SELECT public.has_staff_permission($1,'unknown') AS unknown, public.has_staff_permission($1,'can_record_payments') AS payment
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[{"unknown":false,"payment":true}],"fields":[{"name":"unknown","dataTypeID":16},{"name":"payment","dataTypeID":16}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: SELECT public.has_staff_permission($1,'can_manage_plans') AS allowed
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[{"allowed":true}],"fields":[{"name":"allowed","dataTypeID":16}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 04 missing/unknown permissions deny; owner recognized
+SQL: UPDATE public.gym_staff SET permissions=permissions || '{"can_manage_plans":true,"can_cancel_payments":true}'::jsonb WHERE user_id=$1 AND gym_id=$2
+fixture parameters: ["10000000-0000-0000-0000-000000000002","20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[],"command":"UPDATE","affectedRows":1,"rowCount":1}
+SQL: SELECT public.has_staff_permission($1,'can_manage_plans') AS price,public.has_staff_permission($1,'can_cancel_payments') AS cancel
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[{"price":false,"cancel":false}],"fields":[{"name":"price","dataTypeID":16},{"name":"cancel","dataTypeID":16}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: UPDATE public.plans SET price_mru=999 WHERE id=$1 RETURNING id
+fixture parameters: ["50000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[{"name":"id","dataTypeID":2950}],"command":"UPDATE","affectedRows":0,"rowCount":0}
+PASS 04 receptionist cannot gain owner-only abilities via JSON
+SQL: UPDATE public.gym_staff SET permissions=(permissions - 'can_record_payments' - 'can_manage_members') || '{"can_record_payments":"true"}'::jsonb WHERE user_id=$1 AND gym_id=$2
+fixture parameters: ["10000000-0000-0000-0000-000000000002","20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[],"command":"UPDATE","affectedRows":1,"rowCount":1}
+SQL: SELECT public.has_staff_permission($1,'can_record_payments') AS allowed
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[{"allowed":false}],"fields":[{"name":"allowed","dataTypeID":16}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 04 JSON string true is not boolean authorization
+SQL: INSERT INTO public.payments(gym_id,member_id,amount_mru,method,recorded_by) VALUES($1,$2,1500,'cash',$3)
+fixture parameters: ["20000000-0000-0000-0000-000000000001","40000000-0000-0000-0000-000000000001","10000000-0000-0000-0000-000000000002"]
+ERROR 42501: new row violates row-level security policy for table "payments"
+ROLLBACK after SQLSTATE 42501: new row violates row-level security policy for table "payments"
+PASS 04 payment write denied without payment permission
+SQL: INSERT INTO public.members(gym_id,full_name,phone) VALUES($1,'Fixture imported member','40000003')
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[],"command":"INSERT","affectedRows":1,"rowCount":1}
+SQL: UPDATE public.members SET full_name='Unauthorized change' WHERE id=$1 RETURNING id
+fixture parameters: ["40000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[{"name":"id","dataTypeID":2950}],"command":"UPDATE","affectedRows":0,"rowCount":0}
+PASS 04 import-only staff can insert but cannot edit member
+SQL: DELETE FROM public.payments WHERE member_id=$1
+fixture parameters: ["40000000-0000-0000-0000-000000000001"]
+ERROR 42501: permission denied for table payments
+ROLLBACK after SQLSTATE 42501: permission denied for table payments
+PASS 04 payment deletion forbidden
+SQL: UPDATE public.audit_logs SET action='changed' WHERE gym_id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+ERROR 42501: permission denied for table audit_logs
+ROLLBACK after SQLSTATE 42501: permission denied for table audit_logs
+PASS 04 audit mutation forbidden
+SQL: INSERT INTO public.payments(gym_id,member_id,amount_mru,method,recorded_by) VALUES($1,$2,1500,'cash',$3) RETURNING id
+fixture parameters: ["20000000-0000-0000-0000-000000000001","40000000-0000-0000-0000-000000000001","10000000-0000-0000-0000-000000000001"]
+{"rows":[{"id":"90ca8f4b-b467-44e7-95aa-cbafa61581ac"}],"fields":[{"name":"id","dataTypeID":2950}],"command":"INSERT","affectedRows":1,"rowCount":1}
+SQL: SELECT public.cancel_payment($1,$2)
+fixture parameters: ["90ca8f4b-b467-44e7-95aa-cbafa61581ac","Fixture correction"]
+ERROR 42501: CANCEL_PAYMENT_FORBIDDEN
+ROLLBACK after SQLSTATE 42501: CANCEL_PAYMENT_FORBIDDEN
+PASS 04 receptionist soft-cancel RPC denied
+SQL: SELECT public.cancel_payment($1,$2)
+fixture parameters: ["90ca8f4b-b467-44e7-95aa-cbafa61581ac","Fixture correction"]
+{"rows":[{"cancel_payment":{"id":"90ca8f4b-b467-44e7-95aa-cbafa61581ac","gym_id":"20000000-0000-0000-0000-000000000001","method":"cash","status":"cancelled","member_id":"40000000-0000-0000-0000-000000000001","amount_mru":1500,"created_at":"2026-10-28T06:55:29.554+00:00","recorded_by":"10000000-0000-0000-0000-000000000001","cancelled_at":"2026-10-28T06:55:29.561+00:00","cancelled_by":"10000000-0000-0000-0000-000000000001","subscription_id":null,"transaction_ref":null,"cancellation_reason":"Fixture correction"}}],"fields":[{"name":"cancel_payment","dataTypeID":3802}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: SELECT actor_id, after->>'cancellation_reason' AS reason FROM public.audit_logs WHERE entity='payments' AND entity_id=$1 AND action='UPDATE'
+fixture parameters: ["90ca8f4b-b467-44e7-95aa-cbafa61581ac"]
+{"rows":[{"actor_id":"10000000-0000-0000-0000-000000000001","reason":"Fixture correction"}],"fields":[{"name":"actor_id","dataTypeID":2950},{"name":"reason","dataTypeID":25}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 04 owner cancellation records actor and reason in immutable audit
+SQL: UPDATE public.gym_staff SET permissions=permissions || '{"can_record_payments":true,"can_manage_members":true}'::jsonb WHERE user_id=$1 AND gym_id=$2
+fixture parameters: ["10000000-0000-0000-0000-000000000002","20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[],"command":"UPDATE","affectedRows":1,"rowCount":1}
+LOCAL SQL RESULT: 18 passed, 0 failed; applied steps 01..04

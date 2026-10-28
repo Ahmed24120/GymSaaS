@@ -57,3 +57,17 @@ SELECT id FROM public.visits WHERE gym_id='<GYM_UUID>';
 ```
 
 أعد التفعيل أوROLLBACK قبل متابعة الاختبارات. [03-sql-local.txt](evidence/phase1/03-sql-local.txt) يسجل تسع حالات ناجحة محليًا، تشمل رفض تغيير حالة الصالة بواسطة مالكها ومنع انتحال user_id في دوال العضوية. حالة Supabase: غير مختبر.
+
+## 04 — الصلاحيات والإلغاء
+
+نفّذ `04_permissions_enforcement.sql`. للموظف العادي تُقرأ قيم JSON **boolean** فقط؛ القيمة المفقودة و`"true"` النصية مرفوضتان. المفاتيح المسموح بها للاستقبال: `can_manage_members`, `can_import_members`, `can_record_payments`, `can_scan_qr`. الاستيراد يسمح بالإدراج فقط، ولا يفعّل الاشتراك. مالك الصالة يملك الإدارة ضمن صالته؛ تغيير السعر والإلغاء وإدارة الموظفين لا تُمنح للاستقبال حتى إذا وضعها أحد فيJSON.
+
+```sql
+-- نفّذ بهوية استقبال اختبار بعد SET LOCAL ROLE authenticated وset_config داخل BEGIN/ROLLBACK.
+SELECT public.has_staff_permission('<GYM_UUID>', 'can_record_payments');
+SELECT public.has_staff_permission('<GYM_UUID>', 'can_manage_plans');
+SELECT public.has_staff_permission('<GYM_UUID>', 'can_cancel_payments');
+-- الأخيران false للاستقبال. اسحب صلاحية الدفع من جلسة المالك وأعد المحاولة.
+```
+
+RPC الإلغاء: `public.cancel_payment(p_payment_id uuid,p_reason text)`؛ يلزم سبب بثلاثة أحرف على الأقل وصلاحية المالك، ويُفرض author والتوقيت خادميًا. التدقيق تلقائي في المعاملة نفسها؛ لاDELETE للدفع ولاINSERT/UPDATE/DELETE مباشرة للتدقيق. تعديل السعر مقيد بالمالك عبرRLS. [04-sql-local.txt](evidence/phase1/04-sql-local.txt) يسجل18 حالة ناجحة محليًا، تشمل سبب الإلغاء والمنفذ فيaudit ورفض الإلغاء من الاستقبال. لا إثبات على Supabase بعد.

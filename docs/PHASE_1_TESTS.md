@@ -94,3 +94,40 @@ ROLLBACK;
 للكسر أرسل1500.5 كما هو دون تحويله إلىinteger أولًا؛ المتوقع خطأ نوع/إدخال ولا كتابات. لا تختبر بقيمة تم تقريبها قبل وصولها للدالة. الصفر والسالب يرفضان بـ22023. `SECURITY INVOKER` يبقي RLS فعالة. مشغلات مؤجلة تمنع اشتراكًا بلا دفع وتفعيلًا جديدًا بلا اشتراك مدفوع. الربط القديم الذي ينشئ الاشتراك في طلب منفصل سيفشل حتى المرحلة2، وهذا مقصود.
 
 [05-sql-local.txt](evidence/phase1/05-sql-local.txt):29 حالة محلية ناجحة. شمل الاختبار أخطاء قسرية عند إدخال الدفع وبعد إدخال الدفع والتدقيق أثناء التفعيل؛ جميع العدادات وحالة العضو عادت كما كانت. لا اختبارات تزامن متعددة الاتصالات ولاPostgREST حقيقي ولاقاعدة Supabase في هذا الدليل.
+
+## 06 — nonce والزيارة في معاملة واحدة
+
+نفّذ `06_nonce_visit_atomic.sql` بعد نجاح05. يضيف `visits.qr_nonce` وفهرسًا فريدًا، ويحافظ على الزيارات السابقة دون اصطناع nonce لها. الزيارات الجديدة بطريقةQR تتطلب nonce، وحفظnonce جديد يتطلب زيارة مقابلة في المعاملة نفسها. فشل أي خطوة يرفع خطأSQL ويرجع الكتابتين؛ لاJSON فشل بعد كتابة جزئية.
+
+العقد: `verify_and_record_visit(p_nonce text,p_member_id uuid,p_branch_id uuid DEFAULT NULL)` يعيد استجابةQR ناجحة بمعرّف زيارة فعلي. التكرار يرفع `23505 / REPLAY`؛ عدم وجود اشتراك جارٍ يرفع `P0001 / NO_ACTIVE_SUBSCRIPTION`، والصلاحية المفقودة أو الصالة المعلقة ترفع42501. API في المرحلة2 يجب أن يرفض **كل** أخطاءRPC، بما فيها فقد الجدول/الدالة أو انقطاع التخزين.
+
+```sql
+BEGIN;
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','<ALLOWED_RECEPTION_UUID>',true);
+SELECT public.verify_and_record_visit('TEST_NONCE_UNIQUE','<ACTIVE_MEMBER_UUID>','<BRANCH_UUID>');
+SET CONSTRAINTS ALL IMMEDIATE;
+SELECT id,qr_nonce FROM public.visits WHERE qr_nonce='TEST_NONCE_UNIQUE';
+ROLLBACK;
+```
+
+التوقيع وانتهاء الرمز بعد30 ثانية ما زالا مسؤولية خادمAPI؛ لا ترسل secret للدالة أو للجوال. صاحب صلاحية الدخول يستطيع تسجيل دخول يدوي مصرح به؛ RPC وحدها ليست إثبات أن مصدر الطلب كاميرا أو رمزًا موقعًا. إثبات HMAC وexpiry الحقيقيين ينتظر ربطAPI واختبارات المرحلة3.
+
+[06-sql-local.txt](evidence/phase1/06-sql-local.txt):41 حالة محلية ناجحة للمجموعة، تشمل نجاح زيارة حقيقية، رفض التكرار، تراجعnonce عند فشل زيارة قسري، رفض اشتراك مستقبلي أو منتهٍ أو عضو غير نشط، منع الدخول إلى صالة معلقة حتى منRPC المشرف العام، وبقاء البحث/الدخول اليدوي خاضعًا للاشتراك. أُعيدت الملفات الستة على بيانات الاختبار بعد الكتابات؛ لم تتغير سجلات المدفوعات. التزامن بين اتصالات متعددة وSupabase الحقيقي غير مختبرين.
+
+## فحص قبل التطبيق والتراجع
+
+قبل01، على قاعدة الاختبار فقط، تحقق من المخطط الأصلي وRLS:
+
+```sql
+SELECT version();
+SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+WHERE n.nspname='public' AND c.relkind='r' AND NOT c.relrowsecurity;
+-- المتوقع صفر جداول عمل دونRLS؛ إن ظهرت جداول فتوقف وأرسل أسماءها فقط.
+SELECT schemaname,tablename,policyname,permissive,cmd FROM pg_policies
+WHERE schemaname='public' ORDER BY tablename,policyname;
+```
+
+احتفظ بتصدير schema قبل التطبيق في مكان محلي آمن، لا فيGit أوchat. كل ملف معاملة مستقلة؛ فشل الملف يترك الملفات السابقة مطبقة. عند الحاجة لتراجع بعدCOMMIT: أوقفPreview، احتفظ بالأدلة، واستعد نسخة قاعدة الاختبار السابقة كاملة أو أصلح للأمام بملفNN جديد يراجعه المالك. استعادة دالة وحدها مع سياسات أحدث قد لا تكفي. لا يوجد تراجع آلي يعيد ثغرة تصعيد أو يسمح بحذف المدفوعات. لا تحذف عمودqr_nonce أو بياناته لإرضاء عميل قديم.
+
+يمكن إعادة الاختبارات المحلية من [توثيق المشغّل](PHASE_1_LOCAL_HARNESS.md). المراجع: [PostgreSQL RLS](https://www.postgresql.org/docs/current/ddl-rowsecurity.html)، [أمان الدوال](https://www.postgresql.org/docs/current/sql-createfunction.html)، [PGlite](https://pglite.dev/docs/api).

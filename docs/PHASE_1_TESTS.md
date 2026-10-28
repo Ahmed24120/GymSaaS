@@ -27,3 +27,18 @@ ROLLBACK;
 إذا aborted المعاملة، أرسل `ROLLBACK;` وحده قبل متابعة الأوامر. يجب كذلك أن يبقى تعديل الاسم الذاتي ممكنًا، وأن يسمح لمشرف منصة قائم بتغيير الراية من جلسة اختبار تخصه. لا تستخدم جلسة postgres لإثبات منع مستخدم authenticated.
 
 دليل محلي: [01-sql-local.txt](evidence/phase1/01-sql-local.txt). تنفيذ الملف مرتين نجح محليًا؛ فحص التصعيد رفضهSQLSTATE42501. حالة Supabase: **غير منفّذ وغير مختبر**.
+
+## 02 — تخزين nonce غير قابل للتعديل
+
+نفّذ `02_qr_nonces_hardening.sql` بعد01. التنظيف يحذف فقط سجلات تجاوزت عشر دقائق، بحد1000 سجل في الاستدعاء؛ `REVOKE TRUNCATE` يسحب صلاحية ولا ينفذ تفريغًا. تاريخ `used_at` يُفرض خادميًا.
+
+```sql
+SELECT has_table_privilege('authenticated','public.qr_nonces','UPDATE') AS can_update,
+       has_table_privilege('authenticated','public.qr_nonces','DELETE') AS can_delete,
+       has_function_privilege('authenticated','public.purge_expired_qr_nonces()','EXECUTE') AS can_purge;
+-- المتوقع false, false, false
+SELECT policyname, cmd, permissive FROM pg_policies
+WHERE schemaname='public' AND tablename='qr_nonces';
+```
+
+الدليل المحلي [02-sql-local.txt](evidence/phase1/02-sql-local.txt): ثماني حالات ناجحة، تشمل رفض nonce مكرر وتعديل وحذف nonce وكتابة صالة أخرى، وفرض التاريخ. اختبار حفظ nonce منفردًا خاص بالمرحلة02؛ بعد06 سيشترط وجود زيارة في المعاملة نفسها، وهو تشديد إضافي مقصود. على Supabase لم تُنفّذ هذه الحالات.

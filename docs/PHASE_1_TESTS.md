@@ -42,3 +42,18 @@ WHERE schemaname='public' AND tablename='qr_nonces';
 ```
 
 الدليل المحلي [02-sql-local.txt](evidence/phase1/02-sql-local.txt): ثماني حالات ناجحة، تشمل رفض nonce مكرر وتعديل وحذف nonce وكتابة صالة أخرى، وفرض التاريخ. اختبار حفظ nonce منفردًا خاص بالمرحلة02؛ بعد06 سيشترط وجود زيارة في المعاملة نفسها، وهو تشديد إضافي مقصود. على Supabase لم تُنفّذ هذه الحالات.
+
+## 03 — الصالة المعلقة
+
+نفّذ `03_gym_status_guard.sql`. القيد الإضافي يشمل سياسات قراءة العضو الذاتية، وليس دوال الطاقم وحدها. يستطيع super_admin إدارة الصالة المعلقة وإعادة تفعيلها، بينما تبقى جلسة Auth والملف الشخصي الذاتي متاحين للخروج وإدارة الحساب. لا يُمنع حساب الشخص من صالة أخرى نشطة.
+
+في معاملة اختبار، علّق صالة بواسطة مشرف المنصة، ثم بدّل الدور إلىauthenticated وضع UUID موظفها أو عضوها في `request.jwt.claim.sub`. افحص:
+
+```sql
+SELECT public.is_gym_staff('<GYM_UUID>'), public.is_gym_member('<GYM_UUID>');
+SELECT id FROM public.members WHERE gym_id='<GYM_UUID>';
+SELECT id FROM public.visits WHERE gym_id='<GYM_UUID>';
+-- staff/member: false أو صفر صفوف. super_admin: يستطيع إدارة الصالة.
+```
+
+أعد التفعيل أوROLLBACK قبل متابعة الاختبارات. [03-sql-local.txt](evidence/phase1/03-sql-local.txt) يسجل تسع حالات ناجحة محليًا، تشمل رفض تغيير حالة الصالة بواسطة مالكها ومنع انتحال user_id في دوال العضوية. حالة Supabase: غير مختبر.

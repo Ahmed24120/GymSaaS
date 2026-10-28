@@ -1,0 +1,67 @@
+UTC: 2026-10-28T06:52:02.643Z
+LOCAL PGlite PostgreSQL only. Auth emulated; not Supabase/PostgREST proof. No network database used.
+Engine: [{"version":"PostgreSQL 18.6 (PGlite 0.5.12) on wasm32-unknown-emscripten, compiled by emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 3.1.74 (1092ec30a3fb1d46b1782ff1b4db5094d3d06ae5), 32-bit"}]
+APPLY 01_profiles_lockdown (twice, idempotence)
+APPLY 02_qr_nonces_hardening (twice, idempotence)
+APPLY 03_gym_status_guard (twice, idempotence)
+SQL: UPDATE public.profiles SET is_super_admin=true WHERE id=$1
+fixture parameters: ["10000000-0000-0000-0000-000000000001"]
+ERROR 42501: ADMIN_FLAG_CHANGE_FORBIDDEN
+PASS 01 own profile cannot elevate to super admin
+SQL: UPDATE public.profiles SET full_name='Owner renamed' WHERE id=$1 RETURNING full_name
+fixture parameters: ["10000000-0000-0000-0000-000000000001"]
+{"rows":[{"full_name":"Owner renamed"}],"fields":[{"name":"full_name","dataTypeID":25}],"command":"UPDATE","affectedRows":1,"rowCount":1}
+PASS 01 normal profile fields remain editable
+SQL: UPDATE public.profiles SET is_super_admin=true WHERE id=$1
+fixture parameters: ["10000000-0000-0000-0000-000000000004"]
+{"rows":[],"fields":[],"command":"UPDATE","affectedRows":1,"rowCount":1}
+SQL: UPDATE public.profiles SET is_super_admin=false WHERE id=$1
+fixture parameters: ["10000000-0000-0000-0000-000000000004"]
+{"rows":[],"fields":[],"command":"UPDATE","affectedRows":1,"rowCount":1}
+PASS 01 existing super admin can change flag
+SQL: SELECT id FROM public.members WHERE id=$1
+fixture parameters: ["40000000-0000-0000-0000-000000000001"]
+{"rows":[{"id":"40000000-0000-0000-0000-000000000001"}],"fields":[{"name":"id","dataTypeID":2950}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: SELECT id FROM public.members WHERE id=$1
+fixture parameters: ["40000000-0000-0000-0000-000000000001"]
+{"rows":[{"id":"40000000-0000-0000-0000-000000000001"}],"fields":[{"name":"id","dataTypeID":2950}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 03 active gym data visible to staff and own member
+SQL: UPDATE public.gyms SET status='suspended' WHERE id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+ERROR 42501: GYM_STATUS_ADMIN_ONLY
+PASS 03 owner cannot change platform gym status
+SQL: SELECT public.is_gym_staff($1,$2) AS allowed
+fixture parameters: ["20000000-0000-0000-0000-000000000002","10000000-0000-0000-0000-000000000004"]
+{"rows":[{"allowed":false}],"fields":[{"name":"allowed","dataTypeID":16}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 03 cannot impersonate another user in membership helper
+SQL: UPDATE public.gyms SET status='suspended' WHERE id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[],"command":"UPDATE","affectedRows":1,"rowCount":1}
+SQL: SELECT public.is_gym_staff($1) AS allowed
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[{"allowed":false}],"fields":[{"name":"allowed","dataTypeID":16}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: SELECT public.is_gym_member($1) AS allowed
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[{"allowed":false}],"fields":[{"name":"allowed","dataTypeID":16}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 03 suspended staff/member helpers deny access
+SQL: SELECT id FROM public.members WHERE gym_id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[{"name":"id","dataTypeID":2950}],"command":"SELECT","affectedRows":0,"rowCount":0}
+SQL: SELECT id FROM public.visits WHERE gym_id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[{"name":"id","dataTypeID":2950}],"command":"SELECT","affectedRows":0,"rowCount":0}
+SQL: SELECT id FROM public.members WHERE gym_id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[{"name":"id","dataTypeID":2950}],"command":"SELECT","affectedRows":0,"rowCount":0}
+SQL: SELECT id FROM public.visits WHERE gym_id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[{"name":"id","dataTypeID":2950}],"command":"SELECT","affectedRows":0,"rowCount":0}
+PASS 03 old member self-read policy cannot bypass suspension
+SQL: SELECT id FROM public.gyms WHERE id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[{"id":"20000000-0000-0000-0000-000000000001"}],"fields":[{"name":"id","dataTypeID":2950}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 03 super admin retains management access to suspended gym
+SQL: UPDATE public.gyms SET status='active' WHERE id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[],"command":"UPDATE","affectedRows":1,"rowCount":1}
+LOCAL SQL RESULT: 9 passed, 0 failed; applied steps 01..03

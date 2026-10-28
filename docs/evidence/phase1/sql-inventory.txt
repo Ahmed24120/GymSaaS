@@ -1,0 +1,10 @@
+UTC: 2026-10-28T07:08:12.237Z
+Phase 1 SQL static inventory
+01_profiles_lockdown.sql sha256=98c067bca7a72e19677fd3af37d279832b19666c048c233d088685a981e68b36
+02_qr_nonces_hardening.sql sha256=28693cb35187fc60b2797e078514b26eed6aab90ec4b3a0259931b13b211fd5a
+03_gym_status_guard.sql sha256=4103b1d57c63d5186d2d3ad0e205eb100234f3a8c886ab349124276a1875b2a1
+04_permissions_enforcement.sql sha256=f4b0513d6eae1e5b701c0cd35469f771852840724891f4119dcf101721ee1360
+05_record_payment_rpc.sql sha256=4b07289a76489bfbd99f828cc17637d70238d6d81733ca3043bbcef829e6e02c
+06_nonce_visit_atomic.sql sha256=ef90c157e56a810f5c287712bea32575d54da2744f45c27303621567fcfba0ca
+PASS: six files; no DROP TABLE, standalone TRUNCATE, GRANT TO anon, or RLS disable.
+Review: the only DELETE FROM in these patches is bounded to 1000 nonce rows older than ten minutes.

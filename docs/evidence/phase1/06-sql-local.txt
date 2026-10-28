@@ -1,0 +1,417 @@
+UTC: 2026-10-28T07:06:23.286Z
+LOCAL PGlite PostgreSQL only. Auth emulated; not Supabase/PostgREST proof. No network database used.
+Engine: [{"version":"PostgreSQL 18.6 (PGlite 0.5.12) on wasm32-unknown-emscripten, compiled by emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 3.1.74 (1092ec30a3fb1d46b1782ff1b4db5094d3d06ae5), 32-bit"}]
+APPLY 01_profiles_lockdown (twice, idempotence)
+APPLY 02_qr_nonces_hardening (twice, idempotence)
+APPLY 03_gym_status_guard (twice, idempotence)
+APPLY 04_permissions_enforcement (twice, idempotence)
+APPLY 05_record_payment_rpc (twice, idempotence)
+APPLY 06_nonce_visit_atomic (twice, idempotence)
+SQL: UPDATE public.profiles SET is_super_admin=true WHERE id=$1
+fixture parameters: ["10000000-0000-0000-0000-000000000001"]
+ERROR 42501: ADMIN_FLAG_CHANGE_FORBIDDEN
+ROLLBACK after SQLSTATE 42501: ADMIN_FLAG_CHANGE_FORBIDDEN
+PASS 01 own profile cannot elevate to super admin
+SQL: UPDATE public.profiles SET full_name='Owner renamed' WHERE id=$1 RETURNING full_name
+fixture parameters: ["10000000-0000-0000-0000-000000000001"]
+{"rows":[{"full_name":"Owner renamed"}],"fields":[{"name":"full_name","dataTypeID":25}],"command":"UPDATE","affectedRows":1,"rowCount":1}
+PASS 01 normal profile fields remain editable
+SQL: UPDATE public.profiles SET is_super_admin=true WHERE id=$1
+fixture parameters: ["10000000-0000-0000-0000-000000000004"]
+{"rows":[],"fields":[],"command":"UPDATE","affectedRows":1,"rowCount":1}
+SQL: UPDATE public.profiles SET is_super_admin=false WHERE id=$1
+fixture parameters: ["10000000-0000-0000-0000-000000000004"]
+{"rows":[],"fields":[],"command":"UPDATE","affectedRows":1,"rowCount":1}
+PASS 01 existing super admin can change flag
+SQL: SELECT id FROM public.members WHERE id=$1
+fixture parameters: ["40000000-0000-0000-0000-000000000001"]
+{"rows":[{"id":"40000000-0000-0000-0000-000000000001"}],"fields":[{"name":"id","dataTypeID":2950}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: SELECT id FROM public.members WHERE id=$1
+fixture parameters: ["40000000-0000-0000-0000-000000000001"]
+{"rows":[{"id":"40000000-0000-0000-0000-000000000001"}],"fields":[{"name":"id","dataTypeID":2950}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 03 active gym data visible to staff and own member
+SQL: UPDATE public.gyms SET status='suspended' WHERE id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+ERROR 42501: GYM_STATUS_ADMIN_ONLY
+ROLLBACK after SQLSTATE 42501: GYM_STATUS_ADMIN_ONLY
+PASS 03 owner cannot change platform gym status
+SQL: SELECT public.is_gym_staff($1,$2) AS allowed
+fixture parameters: ["20000000-0000-0000-0000-000000000002","10000000-0000-0000-0000-000000000004"]
+{"rows":[{"allowed":false}],"fields":[{"name":"allowed","dataTypeID":16}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 03 cannot impersonate another user in membership helper
+SQL: UPDATE public.gyms SET status='suspended' WHERE id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[],"command":"UPDATE","affectedRows":1,"rowCount":1}
+SQL: SELECT public.is_gym_staff($1) AS allowed
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[{"allowed":false}],"fields":[{"name":"allowed","dataTypeID":16}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: SELECT public.is_gym_member($1) AS allowed
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[{"allowed":false}],"fields":[{"name":"allowed","dataTypeID":16}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 03 suspended staff/member helpers deny access
+SQL: SELECT id FROM public.members WHERE gym_id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[{"name":"id","dataTypeID":2950}],"command":"SELECT","affectedRows":0,"rowCount":0}
+SQL: SELECT id FROM public.visits WHERE gym_id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[{"name":"id","dataTypeID":2950}],"command":"SELECT","affectedRows":0,"rowCount":0}
+SQL: SELECT id FROM public.members WHERE gym_id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[{"name":"id","dataTypeID":2950}],"command":"SELECT","affectedRows":0,"rowCount":0}
+SQL: SELECT id FROM public.visits WHERE gym_id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[{"name":"id","dataTypeID":2950}],"command":"SELECT","affectedRows":0,"rowCount":0}
+PASS 03 old member self-read policy cannot bypass suspension
+SQL: SELECT id FROM public.gyms WHERE id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[{"id":"20000000-0000-0000-0000-000000000001"}],"fields":[{"name":"id","dataTypeID":2950}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 03 super admin retains management access to suspended gym
+SQL: UPDATE public.gyms SET status='active' WHERE id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[],"command":"UPDATE","affectedRows":1,"rowCount":1}
+SQL: SELECT public.has_staff_permission($1,'unknown') AS unknown, public.has_staff_permission($1,'can_record_payments') AS payment
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[{"unknown":false,"payment":true}],"fields":[{"name":"unknown","dataTypeID":16},{"name":"payment","dataTypeID":16}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: SELECT public.has_staff_permission($1,'can_manage_plans') AS allowed
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[{"allowed":true}],"fields":[{"name":"allowed","dataTypeID":16}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 04 missing/unknown permissions deny; owner recognized
+SQL: UPDATE public.gym_staff SET permissions=permissions || '{"can_manage_plans":true,"can_cancel_payments":true}'::jsonb WHERE user_id=$1 AND gym_id=$2
+fixture parameters: ["10000000-0000-0000-0000-000000000002","20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[],"command":"UPDATE","affectedRows":1,"rowCount":1}
+SQL: SELECT public.has_staff_permission($1,'can_manage_plans') AS price,public.has_staff_permission($1,'can_cancel_payments') AS cancel
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[{"price":false,"cancel":false}],"fields":[{"name":"price","dataTypeID":16},{"name":"cancel","dataTypeID":16}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: UPDATE public.plans SET price_mru=999 WHERE id=$1 RETURNING id
+fixture parameters: ["50000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[{"name":"id","dataTypeID":2950}],"command":"UPDATE","affectedRows":0,"rowCount":0}
+PASS 04 receptionist cannot gain owner-only abilities via JSON
+SQL: UPDATE public.gym_staff SET permissions=(permissions - 'can_record_payments' - 'can_manage_members') || '{"can_record_payments":"true"}'::jsonb WHERE user_id=$1 AND gym_id=$2
+fixture parameters: ["10000000-0000-0000-0000-000000000002","20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[],"command":"UPDATE","affectedRows":1,"rowCount":1}
+SQL: SELECT public.has_staff_permission($1,'can_record_payments') AS allowed
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[{"allowed":false}],"fields":[{"name":"allowed","dataTypeID":16}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 04 JSON string true is not boolean authorization
+SQL: INSERT INTO public.payments(gym_id,member_id,amount_mru,method,recorded_by) VALUES($1,$2,1500,'cash',$3)
+fixture parameters: ["20000000-0000-0000-0000-000000000001","40000000-0000-0000-0000-000000000001","10000000-0000-0000-0000-000000000002"]
+ERROR 42501: RECORD_PAYMENT_FORBIDDEN
+ROLLBACK after SQLSTATE 42501: RECORD_PAYMENT_FORBIDDEN
+PASS 04 payment write denied without payment permission
+SQL: INSERT INTO public.members(gym_id,full_name,phone) VALUES($1,'Fixture imported member','40000003')
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[],"command":"INSERT","affectedRows":1,"rowCount":1}
+SQL: UPDATE public.members SET full_name='Unauthorized change' WHERE id=$1 RETURNING id
+fixture parameters: ["40000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[{"name":"id","dataTypeID":2950}],"command":"UPDATE","affectedRows":0,"rowCount":0}
+PASS 04 import-only staff can insert but cannot edit member
+SQL: DELETE FROM public.payments WHERE member_id=$1
+fixture parameters: ["40000000-0000-0000-0000-000000000001"]
+ERROR 42501: permission denied for table payments
+ROLLBACK after SQLSTATE 42501: permission denied for table payments
+PASS 04 payment deletion forbidden
+SQL: UPDATE public.audit_logs SET action='changed' WHERE gym_id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+ERROR 42501: permission denied for table audit_logs
+ROLLBACK after SQLSTATE 42501: permission denied for table audit_logs
+PASS 04 audit mutation forbidden
+SQL: UPDATE public.gym_staff SET permissions=permissions || '{"can_record_payments":true,"can_manage_members":true}'::jsonb WHERE user_id=$1 AND gym_id=$2
+fixture parameters: ["10000000-0000-0000-0000-000000000002","20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[],"command":"UPDATE","affectedRows":1,"rowCount":1}
+SQL: SELECT (SELECT count(*) FROM public.subscriptions) AS subscriptions,(SELECT count(*) FROM public.payments) AS payments,(SELECT count(*) FROM public.audit_logs) AS audits,(SELECT status FROM public.members WHERE id=$1) AS member_status
+fixture parameters: ["40000000-0000-0000-0000-000000000001"]
+{"rows":[{"subscriptions":2,"payments":2,"audits":17,"member_status":"inactive"}],"fields":[{"name":"subscriptions","dataTypeID":20},{"name":"payments","dataTypeID":20},{"name":"audits","dataTypeID":20},{"name":"member_status","dataTypeID":16418}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: SELECT public.record_payment($1,$2,$3,$4::public.payment_method,$5,$6) AS payment
+fixture parameters: ["40000000-0000-0000-0000-000000000001","50000000-0000-0000-0000-000000000001",1500,"cash","FIXTURE","30000000-0000-0000-0000-000000000001"]
+{"rows":[{"payment":{"id":"b4dd261c-d6f9-481f-b447-951c19f133d9","gym_id":"20000000-0000-0000-0000-000000000001","member":{"id":"40000000-0000-0000-0000-000000000001","phone":"40000001","full_name":"Fixture Member A"},"method":"cash","status":"completed","recorder":{"id":"10000000-0000-0000-0000-000000000002","full_name":"مستخدم جديد"},"member_id":"40000000-0000-0000-0000-000000000001","amount_mru":1500,"created_at":"2026-10-28T07:06:23.601+00:00","recorded_by":"10000000-0000-0000-0000-000000000002","cancelled_at":null,"cancelled_by":null,"subscription":{"id":"2d881def-e176-4862-964e-931188c66934","plan":{"id":"50000000-0000-0000-0000-000000000001","name":"Monthly A"},"end_date":"2026-11-27T07:06:23.597+00:00","start_date":"2026-10-28T07:06:23.597+00:00"},"subscription_id":"2d881def-e176-4862-964e-931188c66934","transaction_ref":"FIXTURE","cancellation_reason":null}}],"fields":[{"name":"payment","dataTypeID":3802}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: SELECT (SELECT count(*) FROM public.subscriptions) AS subscriptions,(SELECT count(*) FROM public.payments) AS payments,(SELECT count(*) FROM public.audit_logs) AS audits,(SELECT status FROM public.members WHERE id=$1) AS member_status
+fixture parameters: ["40000000-0000-0000-0000-000000000001"]
+{"rows":[{"subscriptions":3,"payments":3,"audits":20,"member_status":"active"}],"fields":[{"name":"subscriptions","dataTypeID":20},{"name":"payments","dataTypeID":20},{"name":"audits","dataTypeID":20},{"name":"member_status","dataTypeID":16418}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: SELECT entity,actor_id FROM public.audit_logs WHERE entity_id IN ($1,$2) ORDER BY entity
+fixture parameters: ["b4dd261c-d6f9-481f-b447-951c19f133d9","2d881def-e176-4862-964e-931188c66934"]
+{"rows":[{"entity":"payments","actor_id":"10000000-0000-0000-0000-000000000002"},{"entity":"subscriptions","actor_id":"10000000-0000-0000-0000-000000000002"}],"fields":[{"name":"entity","dataTypeID":25},{"name":"actor_id","dataTypeID":2950}],"command":"SELECT","affectedRows":0,"rowCount":2}
+PASS 05 payment activates member and records subscription/payment/audit atomically
+SQL: SELECT (SELECT count(*) FROM public.subscriptions) AS subscriptions,(SELECT count(*) FROM public.payments) AS payments,(SELECT count(*) FROM public.audit_logs) AS audits,(SELECT status FROM public.members WHERE id=$1) AS member_status
+fixture parameters: ["40000000-0000-0000-0000-000000000001"]
+{"rows":[{"subscriptions":3,"payments":3,"audits":20,"member_status":"active"}],"fields":[{"name":"subscriptions","dataTypeID":20},{"name":"payments","dataTypeID":20},{"name":"audits","dataTypeID":20},{"name":"member_status","dataTypeID":16418}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: SELECT public.record_payment($1,$2,$3,$4::public.payment_method,$5,$6) AS payment
+fixture parameters: ["40000000-0000-0000-0000-000000000001","50000000-0000-0000-0000-000000000001",1500.5,"cash","FIXTURE","30000000-0000-0000-0000-000000000001"]
+ERROR 22P02: invalid input syntax for type integer: "1500.5"
+ROLLBACK after SQLSTATE 22P02: invalid input syntax for type integer: "1500.5"
+SQL: SELECT public.record_payment($1,$2,$3,$4::public.payment_method,$5,$6) AS payment
+fixture parameters: ["40000000-0000-0000-0000-000000000001","50000000-0000-0000-0000-000000000001",0,"cash","FIXTURE","30000000-0000-0000-0000-000000000001"]
+ERROR 22023: POSITIVE_INTEGER_MRU_REQUIRED
+ROLLBACK after SQLSTATE 22023: POSITIVE_INTEGER_MRU_REQUIRED
+SQL: SELECT public.record_payment($1,$2,$3,$4::public.payment_method,$5,$6) AS payment
+fixture parameters: ["40000000-0000-0000-0000-000000000001","50000000-0000-0000-0000-000000000001",-1,"cash","FIXTURE","30000000-0000-0000-0000-000000000001"]
+ERROR 22023: POSITIVE_INTEGER_MRU_REQUIRED
+ROLLBACK after SQLSTATE 22023: POSITIVE_INTEGER_MRU_REQUIRED
+SQL: SELECT (SELECT count(*) FROM public.subscriptions) AS subscriptions,(SELECT count(*) FROM public.payments) AS payments,(SELECT count(*) FROM public.audit_logs) AS audits,(SELECT status FROM public.members WHERE id=$1) AS member_status
+fixture parameters: ["40000000-0000-0000-0000-000000000001"]
+{"rows":[{"subscriptions":3,"payments":3,"audits":20,"member_status":"active"}],"fields":[{"name":"subscriptions","dataTypeID":20},{"name":"payments","dataTypeID":20},{"name":"audits","dataTypeID":20},{"name":"member_status","dataTypeID":16418}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 05 fraction/zero/negative rejected without writes
+SQL: INSERT INTO public.members(id,gym_id,branch_id,full_name,phone) VALUES($1,$2,$3,'Fixture rollback member','40000005')
+fixture parameters: ["40000000-0000-0000-0000-000000000005","20000000-0000-0000-0000-000000000001","30000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[],"command":"INSERT","affectedRows":1,"rowCount":1}
+SQL: SELECT (SELECT count(*) FROM public.subscriptions) AS subscriptions,(SELECT count(*) FROM public.payments) AS payments,(SELECT count(*) FROM public.audit_logs) AS audits,(SELECT status FROM public.members WHERE id=$1) AS member_status
+fixture parameters: ["40000000-0000-0000-0000-000000000005"]
+{"rows":[{"subscriptions":3,"payments":3,"audits":21,"member_status":"inactive"}],"fields":[{"name":"subscriptions","dataTypeID":20},{"name":"payments","dataTypeID":20},{"name":"audits","dataTypeID":20},{"name":"member_status","dataTypeID":16418}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: SELECT public.record_payment($1,$2,$3,$4::public.payment_method,$5,$6) AS payment
+fixture parameters: ["40000000-0000-0000-0000-000000000005","50000000-0000-0000-0000-000000000001",1500,"cash","FIXTURE_FORCE_FAILURE","30000000-0000-0000-0000-000000000001"]
+ERROR 23514: FIXTURE_FORCED_PAYMENT_FAILURE
+ROLLBACK after SQLSTATE 23514: FIXTURE_FORCED_PAYMENT_FAILURE
+SQL: SELECT (SELECT count(*) FROM public.subscriptions) AS subscriptions,(SELECT count(*) FROM public.payments) AS payments,(SELECT count(*) FROM public.audit_logs) AS audits,(SELECT status FROM public.members WHERE id=$1) AS member_status
+fixture parameters: ["40000000-0000-0000-0000-000000000005"]
+{"rows":[{"subscriptions":3,"payments":3,"audits":21,"member_status":"inactive"}],"fields":[{"name":"subscriptions","dataTypeID":20},{"name":"payments","dataTypeID":20},{"name":"audits","dataTypeID":20},{"name":"member_status","dataTypeID":16418}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 05 forced payment failure rolls back subscription/member/audit
+SQL: SELECT (SELECT count(*) FROM public.subscriptions) AS subscriptions,(SELECT count(*) FROM public.payments) AS payments,(SELECT count(*) FROM public.audit_logs) AS audits,(SELECT status FROM public.members WHERE id=$1) AS member_status
+fixture parameters: ["40000000-0000-0000-0000-000000000005"]
+{"rows":[{"subscriptions":3,"payments":3,"audits":21,"member_status":"inactive"}],"fields":[{"name":"subscriptions","dataTypeID":20},{"name":"payments","dataTypeID":20},{"name":"audits","dataTypeID":20},{"name":"member_status","dataTypeID":16418}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: SELECT public.record_payment($1,$2,$3,$4::public.payment_method,$5,$6) AS payment
+fixture parameters: ["40000000-0000-0000-0000-000000000005","50000000-0000-0000-0000-000000000001",1500,"cash","FIXTURE","30000000-0000-0000-0000-000000000001"]
+ERROR 23514: FIXTURE_FORCED_ACTIVATION_FAILURE
+ROLLBACK after SQLSTATE 23514: FIXTURE_FORCED_ACTIVATION_FAILURE
+SQL: SELECT (SELECT count(*) FROM public.subscriptions) AS subscriptions,(SELECT count(*) FROM public.payments) AS payments,(SELECT count(*) FROM public.audit_logs) AS audits,(SELECT status FROM public.members WHERE id=$1) AS member_status
+fixture parameters: ["40000000-0000-0000-0000-000000000005"]
+{"rows":[{"subscriptions":3,"payments":3,"audits":21,"member_status":"inactive"}],"fields":[{"name":"subscriptions","dataTypeID":20},{"name":"payments","dataTypeID":20},{"name":"audits","dataTypeID":20},{"name":"member_status","dataTypeID":16418}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 05 late activation failure rolls back even payment and audit already inserted
+SQL: SELECT public.record_payment($1,$2,$3,$4::public.payment_method,$5,$6) AS payment
+fixture parameters: ["40000000-0000-0000-0000-000000000001","50000000-0000-0000-0000-000000000001",1500,"cash","FIXTURE","30000000-0000-0000-0000-000000000001"]
+{"rows":[{"payment":{"id":"a03d5eca-0b6c-42f7-a607-e216eb290de1","gym_id":"20000000-0000-0000-0000-000000000001","member":{"id":"40000000-0000-0000-0000-000000000001","phone":"40000001","full_name":"Fixture Member A"},"method":"cash","status":"completed","recorder":{"id":"10000000-0000-0000-0000-000000000002","full_name":"مستخدم جديد"},"member_id":"40000000-0000-0000-0000-000000000001","amount_mru":1500,"created_at":"2026-10-28T07:06:23.66+00:00","recorded_by":"10000000-0000-0000-0000-000000000002","cancelled_at":null,"cancelled_by":null,"subscription":{"id":"f50b05ba-76c9-45b3-9af3-2fbad18dcd83","plan":{"id":"50000000-0000-0000-0000-000000000001","name":"Monthly A"},"end_date":"2026-12-27T07:06:23.597+00:00","start_date":"2026-11-27T07:06:23.597+00:00"},"subscription_id":"f50b05ba-76c9-45b3-9af3-2fbad18dcd83","transaction_ref":"FIXTURE","cancellation_reason":null}}],"fields":[{"name":"payment","dataTypeID":3802}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 05 early renewal starts at existing end and preserves paid days
+SQL: SELECT public.record_payment($1,$2,$3,$4::public.payment_method,$5,$6) AS payment
+fixture parameters: ["40000000-0000-0000-0000-000000000006","50000000-0000-0000-0000-000000000001",1500,"cash","FIXTURE","30000000-0000-0000-0000-000000000001"]
+{"rows":[{"payment":{"id":"5f65dec9-2de4-427e-96b9-ca522255407d","gym_id":"20000000-0000-0000-0000-000000000001","member":{"id":"40000000-0000-0000-0000-000000000006","phone":"40000006","full_name":"Fixture expired member"},"method":"cash","status":"completed","recorder":{"id":"10000000-0000-0000-0000-000000000002","full_name":"مستخدم جديد"},"member_id":"40000000-0000-0000-0000-000000000006","amount_mru":1500,"created_at":"2026-10-28T07:06:23.669+00:00","recorded_by":"10000000-0000-0000-0000-000000000002","cancelled_at":null,"cancelled_by":null,"subscription":{"id":"d7b9b030-a857-4f5b-84bf-ecc0a649fb93","plan":{"id":"50000000-0000-0000-0000-000000000001","name":"Monthly A"},"end_date":"2026-11-27T07:06:23.668+00:00","start_date":"2026-10-28T07:06:23.668+00:00"},"subscription_id":"d7b9b030-a857-4f5b-84bf-ecc0a649fb93","transaction_ref":"FIXTURE","cancellation_reason":null}}],"fields":[{"name":"payment","dataTypeID":3802}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: SELECT start_date > now()-interval '1 minute' AND start_date<=clock_timestamp() AS starts_now FROM public.subscriptions WHERE id=$1
+fixture parameters: ["d7b9b030-a857-4f5b-84bf-ecc0a649fb93"]
+{"rows":[{"starts_now":true}],"fields":[{"name":"starts_now","dataTypeID":16}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 05 renewal after expiry starts now rather than old expiry
+SQL: SELECT (SELECT count(*) FROM public.subscriptions) AS subscriptions,(SELECT count(*) FROM public.payments) AS payments,(SELECT count(*) FROM public.audit_logs) AS audits,(SELECT status FROM public.members WHERE id=$1) AS member_status
+fixture parameters: ["40000000-0000-0000-0000-000000000005"]
+{"rows":[{"subscriptions":5,"payments":5,"audits":27,"member_status":"inactive"}],"fields":[{"name":"subscriptions","dataTypeID":20},{"name":"payments","dataTypeID":20},{"name":"audits","dataTypeID":20},{"name":"member_status","dataTypeID":16418}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: INSERT INTO public.subscriptions(gym_id,member_id,plan_id,end_date) VALUES($1,$2,$3,'2099-01-01')
+fixture parameters: ["20000000-0000-0000-0000-000000000001","40000000-0000-0000-0000-000000000005","50000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[],"command":"INSERT","affectedRows":1,"rowCount":1}
+ROLLBACK after SQLSTATE 23514: SUBSCRIPTION_REQUIRES_PAYMENT
+SQL: UPDATE public.members SET status='active' WHERE id=$1
+fixture parameters: ["40000000-0000-0000-0000-000000000005"]
+{"rows":[],"fields":[],"command":"UPDATE","affectedRows":1,"rowCount":1}
+ROLLBACK after SQLSTATE 23514: MEMBER_ACTIVATION_REQUIRES_PAYMENT
+SQL: SELECT (SELECT count(*) FROM public.subscriptions) AS subscriptions,(SELECT count(*) FROM public.payments) AS payments,(SELECT count(*) FROM public.audit_logs) AS audits,(SELECT status FROM public.members WHERE id=$1) AS member_status
+fixture parameters: ["40000000-0000-0000-0000-000000000005"]
+{"rows":[{"subscriptions":5,"payments":5,"audits":27,"member_status":"inactive"}],"fields":[{"name":"subscriptions","dataTypeID":20},{"name":"payments","dataTypeID":20},{"name":"audits","dataTypeID":20},{"name":"member_status","dataTypeID":16418}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 05 unpaid direct subscription and member activation rejected at commit
+SQL: SELECT public.record_payment($1,$2,$3,$4::public.payment_method,$5,$6) AS payment
+fixture parameters: ["40000000-0000-0000-0000-000000000002","50000000-0000-0000-0000-000000000001",1500,"cash","FIXTURE","30000000-0000-0000-0000-000000000001"]
+ERROR 42501: RECORD_PAYMENT_FORBIDDEN
+ROLLBACK after SQLSTATE 42501: RECORD_PAYMENT_FORBIDDEN
+SQL: SELECT public.record_payment($1,$2,$3,$4::public.payment_method,$5,$6) AS payment
+fixture parameters: ["40000000-0000-0000-0000-000000000001","50000000-0000-0000-0000-000000000002",1500,"cash","FIXTURE","30000000-0000-0000-0000-000000000001"]
+ERROR 23503: PLAN_GYM_MISMATCH_OR_INACTIVE
+ROLLBACK after SQLSTATE 23503: PLAN_GYM_MISMATCH_OR_INACTIVE
+SQL: SELECT public.record_payment($1,$2,$3,$4::public.payment_method,$5,$6) AS payment
+fixture parameters: ["40000000-0000-0000-0000-000000000001","50000000-0000-0000-0000-000000000001",1500,"cash","FIXTURE","30000000-0000-0000-0000-000000000002"]
+ERROR 23503: BRANCH_GYM_MISMATCH
+ROLLBACK after SQLSTATE 23503: BRANCH_GYM_MISMATCH
+SQL: INSERT INTO public.members(gym_id,branch_id,full_name,phone) VALUES($1,$2,'Fixture wrong branch','40000006')
+fixture parameters: ["20000000-0000-0000-0000-000000000001","30000000-0000-0000-0000-000000000002"]
+ERROR 23503: insert or update on table "members" violates foreign key constraint "fk_member_branch_gym"
+ROLLBACK after SQLSTATE 23503: insert or update on table "members" violates foreign key constraint "fk_member_branch_gym"
+PASS 05 cross-gym member/plan/branch refused
+SQL: UPDATE public.subscriptions SET end_date='2099-01-01' WHERE id=$1
+fixture parameters: ["2d881def-e176-4862-964e-931188c66934"]
+ERROR 42501: SUBSCRIPTION_TERMS_IMMUTABLE
+ROLLBACK after SQLSTATE 42501: SUBSCRIPTION_TERMS_IMMUTABLE
+PASS 05 changing subscription dates denied
+SQL: SELECT public.record_payment($1,$2,$3,$4::public.payment_method,$5,$6) AS payment
+fixture parameters: ["40000000-0000-0000-0000-000000000001","50000000-0000-0000-0000-000000000001",1500,"cash","FIXTURE","30000000-0000-0000-0000-000000000001"]
+ERROR 42501: RECORD_PAYMENT_FORBIDDEN
+ROLLBACK after SQLSTATE 42501: RECORD_PAYMENT_FORBIDDEN
+PASS 05 member role cannot record own payment
+SQL: UPDATE public.gym_staff SET permissions=permissions || '{"can_record_payments":false}'::jsonb WHERE user_id=$1 AND gym_id=$2
+fixture parameters: ["10000000-0000-0000-0000-000000000002","20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[],"command":"UPDATE","affectedRows":1,"rowCount":1}
+SQL: SELECT public.record_payment($1,$2,$3,$4::public.payment_method,$5,$6) AS payment
+fixture parameters: ["40000000-0000-0000-0000-000000000001","50000000-0000-0000-0000-000000000001",1500,"cash","FIXTURE","30000000-0000-0000-0000-000000000001"]
+ERROR 42501: RECORD_PAYMENT_FORBIDDEN
+ROLLBACK after SQLSTATE 42501: RECORD_PAYMENT_FORBIDDEN
+PASS 05 RPC rejects receptionist without payment permission
+SQL: UPDATE public.gym_staff SET permissions=permissions || '{"can_record_payments":true}'::jsonb WHERE user_id=$1 AND gym_id=$2
+fixture parameters: ["10000000-0000-0000-0000-000000000002","20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[],"command":"UPDATE","affectedRows":1,"rowCount":1}
+SQL: SELECT public.cancel_payment($1,$2)
+fixture parameters: ["b4dd261c-d6f9-481f-b447-951c19f133d9","Fixture refund"]
+ERROR 42501: CANCEL_PAYMENT_FORBIDDEN
+ROLLBACK after SQLSTATE 42501: CANCEL_PAYMENT_FORBIDDEN
+SQL: SELECT public.cancel_payment($1,$2)
+fixture parameters: ["b4dd261c-d6f9-481f-b447-951c19f133d9","Fixture refund"]
+{"rows":[{"cancel_payment":{"id":"b4dd261c-d6f9-481f-b447-951c19f133d9","gym_id":"20000000-0000-0000-0000-000000000001","method":"cash","status":"cancelled","member_id":"40000000-0000-0000-0000-000000000001","amount_mru":1500,"created_at":"2026-10-28T07:06:23.601+00:00","recorded_by":"10000000-0000-0000-0000-000000000002","cancelled_at":"2026-10-28T07:06:23.705+00:00","cancelled_by":"10000000-0000-0000-0000-000000000001","subscription_id":"2d881def-e176-4862-964e-931188c66934","transaction_ref":"FIXTURE","cancellation_reason":"Fixture refund"}}],"fields":[{"name":"cancel_payment","dataTypeID":3802}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: SELECT actor_id,after->>'cancellation_reason' AS reason FROM public.audit_logs WHERE entity='payments' AND entity_id=$1 AND action='UPDATE'
+fixture parameters: ["b4dd261c-d6f9-481f-b447-951c19f133d9"]
+{"rows":[{"actor_id":"10000000-0000-0000-0000-000000000001","reason":"Fixture refund"}],"fields":[{"name":"actor_id","dataTypeID":2950},{"name":"reason","dataTypeID":25}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 05 paid soft-cancel records reason and actor
+SQL: SELECT public.record_payment($1,$2,$3,$4::public.payment_method,$5,$6) AS payment
+fixture parameters: ["40000000-0000-0000-0000-000000000002","50000000-0000-0000-0000-000000000002",1500,"cash","FIXTURE_B","30000000-0000-0000-0000-000000000002"]
+{"rows":[{"payment":{"id":"a80e27d5-529a-458a-a45a-cb3c2b944532","gym_id":"20000000-0000-0000-0000-000000000002","member":{"id":"40000000-0000-0000-0000-000000000002","phone":"40000002","full_name":"Fixture Member B"},"method":"cash","status":"completed","recorder":{"id":"10000000-0000-0000-0000-000000000004","full_name":"مستخدم جديد"},"member_id":"40000000-0000-0000-0000-000000000002","amount_mru":1500,"created_at":"2026-10-28T07:06:23.712+00:00","recorded_by":"10000000-0000-0000-0000-000000000004","cancelled_at":null,"cancelled_by":null,"subscription":{"id":"4e3b57e6-c142-4550-a25b-b1d8b0306fb8","plan":{"id":"50000000-0000-0000-0000-000000000002","name":"Monthly B"},"end_date":"2026-11-27T07:06:23.71+00:00","start_date":"2026-10-28T07:06:23.71+00:00"},"subscription_id":"4e3b57e6-c142-4550-a25b-b1d8b0306fb8","transaction_ref":"FIXTURE_B","cancellation_reason":null}}],"fields":[{"name":"payment","dataTypeID":3802}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: INSERT INTO public.visits(gym_id,member_id,branch_id,scanned_by,method) VALUES($1,$2,$3,$4,'manual')
+fixture parameters: ["20000000-0000-0000-0000-000000000002","40000000-0000-0000-0000-000000000002","30000000-0000-0000-0000-000000000002","10000000-0000-0000-0000-000000000004"]
+{"rows":[],"fields":[],"command":"INSERT","affectedRows":1,"rowCount":1}
+SQL: SELECT id FROM public.members WHERE gym_id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000002"]
+{"rows":[],"fields":[{"name":"id","dataTypeID":2950}],"command":"SELECT","affectedRows":0,"rowCount":0}
+SQL: UPDATE public.members SET gym_id=gym_id WHERE gym_id=$1 RETURNING id
+fixture parameters: ["20000000-0000-0000-0000-000000000002"]
+{"rows":[],"fields":[{"name":"id","dataTypeID":2950}],"command":"UPDATE","affectedRows":0,"rowCount":0}
+SQL: DELETE FROM public.members WHERE gym_id=$1 RETURNING id
+fixture parameters: ["20000000-0000-0000-0000-000000000002"]
+{"rows":[],"fields":[{"name":"id","dataTypeID":2950}],"command":"DELETE","affectedRows":0,"rowCount":0}
+SQL: SELECT id FROM public.payments WHERE gym_id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000002"]
+{"rows":[],"fields":[{"name":"id","dataTypeID":2950}],"command":"SELECT","affectedRows":0,"rowCount":0}
+SQL: UPDATE public.payments SET gym_id=gym_id WHERE gym_id=$1 RETURNING id
+fixture parameters: ["20000000-0000-0000-0000-000000000002"]
+{"rows":[],"fields":[{"name":"id","dataTypeID":2950}],"command":"UPDATE","affectedRows":0,"rowCount":0}
+SQL: DELETE FROM public.payments WHERE gym_id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000002"]
+ERROR 42501: permission denied for table payments
+ROLLBACK after SQLSTATE 42501: permission denied for table payments
+SQL: SELECT id FROM public.subscriptions WHERE gym_id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000002"]
+{"rows":[],"fields":[{"name":"id","dataTypeID":2950}],"command":"SELECT","affectedRows":0,"rowCount":0}
+SQL: UPDATE public.subscriptions SET gym_id=gym_id WHERE gym_id=$1 RETURNING id
+fixture parameters: ["20000000-0000-0000-0000-000000000002"]
+{"rows":[],"fields":[{"name":"id","dataTypeID":2950}],"command":"UPDATE","affectedRows":0,"rowCount":0}
+SQL: DELETE FROM public.subscriptions WHERE gym_id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000002"]
+ERROR 42501: permission denied for table subscriptions
+ROLLBACK after SQLSTATE 42501: permission denied for table subscriptions
+SQL: SELECT id FROM public.visits WHERE gym_id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000002"]
+{"rows":[],"fields":[{"name":"id","dataTypeID":2950}],"command":"SELECT","affectedRows":0,"rowCount":0}
+SQL: UPDATE public.visits SET gym_id=gym_id WHERE gym_id=$1 RETURNING id
+fixture parameters: ["20000000-0000-0000-0000-000000000002"]
+{"rows":[],"fields":[{"name":"id","dataTypeID":2950}],"command":"UPDATE","affectedRows":0,"rowCount":0}
+SQL: DELETE FROM public.visits WHERE gym_id=$1 RETURNING id
+fixture parameters: ["20000000-0000-0000-0000-000000000002"]
+{"rows":[],"fields":[{"name":"id","dataTypeID":2950}],"command":"DELETE","affectedRows":0,"rowCount":0}
+PASS 05 A cannot read/update/delete B members/payments/subscriptions/visits
+SQL: SELECT public.verify_and_record_visit($1,$2,$3) AS verification
+fixture parameters: ["fixture-qr-valid","40000000-0000-0000-0000-000000000001","30000000-0000-0000-0000-000000000001"]
+{"rows":[{"verification":{"member":{"id":"40000000-0000-0000-0000-000000000001","phone":"40000001","full_name":"Fixture Member A"},"allowed":true,"visit_id":"ad37aa8f-8be5-419e-a800-31959104579b","subscription":{"end_date":"2026-11-27T07:06:23.597+00:00","plan_name":"Monthly A"}}}],"fields":[{"name":"verification","dataTypeID":3802}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: SELECT id FROM public.visits WHERE id=$1 AND qr_nonce='fixture-qr-valid'
+fixture parameters: ["ad37aa8f-8be5-419e-a800-31959104579b"]
+{"rows":[{"id":"ad37aa8f-8be5-419e-a800-31959104579b"}],"fields":[{"name":"id","dataTypeID":2950}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 06 first QR RPC records an actual visit and nonce
+SQL: SELECT (SELECT count(*) FROM public.qr_nonces) AS nonces,(SELECT count(*) FROM public.visits) AS visits
+{"rows":[{"nonces":1,"visits":3}],"fields":[{"name":"nonces","dataTypeID":20},{"name":"visits","dataTypeID":20}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: SELECT public.verify_and_record_visit($1,$2,$3) AS verification
+fixture parameters: ["fixture-qr-valid","40000000-0000-0000-0000-000000000001","30000000-0000-0000-0000-000000000001"]
+ERROR 23505: REPLAY
+ROLLBACK after SQLSTATE 23505: REPLAY
+SQL: SELECT (SELECT count(*) FROM public.qr_nonces) AS nonces,(SELECT count(*) FROM public.visits) AS visits
+{"rows":[{"nonces":1,"visits":3}],"fields":[{"name":"nonces","dataTypeID":20},{"name":"visits","dataTypeID":20}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 06 identical nonce rejected as REPLAY without second visit
+SQL: UPDATE public.qr_nonces SET used_at='2000-01-01' WHERE nonce='fixture-qr-valid'
+ERROR 42501: permission denied for table qr_nonces
+ROLLBACK after SQLSTATE 42501: permission denied for table qr_nonces
+SQL: DELETE FROM public.qr_nonces WHERE nonce='fixture-qr-valid'
+ERROR 42501: permission denied for table qr_nonces
+ROLLBACK after SQLSTATE 42501: permission denied for table qr_nonces
+PASS 06 used nonce cannot be updated or deleted
+SQL: SELECT (SELECT count(*) FROM public.qr_nonces) AS nonces,(SELECT count(*) FROM public.visits) AS visits
+{"rows":[{"nonces":1,"visits":3}],"fields":[{"name":"nonces","dataTypeID":20},{"name":"visits","dataTypeID":20}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: SELECT public.verify_and_record_visit($1,$2,$3) AS verification
+fixture parameters: ["fixture-visit-failure","40000000-0000-0000-0000-000000000001","30000000-0000-0000-0000-000000000001"]
+ERROR 23514: FIXTURE_FORCED_VISIT_FAILURE
+ROLLBACK after SQLSTATE 23514: FIXTURE_FORCED_VISIT_FAILURE
+SQL: SELECT (SELECT count(*) FROM public.qr_nonces) AS nonces,(SELECT count(*) FROM public.visits) AS visits
+{"rows":[{"nonces":1,"visits":3}],"fields":[{"name":"nonces","dataTypeID":20},{"name":"visits","dataTypeID":20}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 06 forced visit failure rolls back nonce consumption
+SQL: SELECT (SELECT count(*) FROM public.qr_nonces) AS nonces,(SELECT count(*) FROM public.visits) AS visits
+{"rows":[{"nonces":1,"visits":3}],"fields":[{"name":"nonces","dataTypeID":20},{"name":"visits","dataTypeID":20}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: INSERT INTO public.qr_nonces(nonce,gym_id,member_id) VALUES('fixture-orphan-nonce',$1,$2)
+fixture parameters: ["20000000-0000-0000-0000-000000000001","40000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[],"command":"INSERT","affectedRows":1,"rowCount":1}
+ROLLBACK after SQLSTATE 23514: NONCE_REQUIRES_VISIT
+SQL: SELECT (SELECT count(*) FROM public.qr_nonces) AS nonces,(SELECT count(*) FROM public.visits) AS visits
+{"rows":[{"nonces":1,"visits":3}],"fields":[{"name":"nonces","dataTypeID":20},{"name":"visits","dataTypeID":20}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 06 standalone nonce cannot commit
+SQL: INSERT INTO public.visits(gym_id,member_id,branch_id,scanned_by,method) VALUES($1,$2,$3,$4,'qr')
+fixture parameters: ["20000000-0000-0000-0000-000000000001","40000000-0000-0000-0000-000000000001","30000000-0000-0000-0000-000000000001","10000000-0000-0000-0000-000000000002"]
+ERROR 23514: QR_NONCE_REQUIRED
+ROLLBACK after SQLSTATE 23514: QR_NONCE_REQUIRED
+PASS 06 QR visit without nonce cannot be forged via table API
+SQL: SELECT (SELECT count(*) FROM public.qr_nonces) AS nonces,(SELECT count(*) FROM public.visits) AS visits
+{"rows":[{"nonces":1,"visits":3}],"fields":[{"name":"nonces","dataTypeID":20},{"name":"visits","dataTypeID":20}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: SELECT public.verify_and_record_visit($1,$2,$3) AS verification
+fixture parameters: ["fixture-inactive","40000000-0000-0000-0000-000000000005","30000000-0000-0000-0000-000000000001"]
+ERROR P0001: INACTIVE_MEMBER
+ROLLBACK after SQLSTATE P0001: INACTIVE_MEMBER
+SQL: SELECT public.verify_and_record_visit($1,$2,$3) AS verification
+fixture parameters: ["fixture-expired","40000000-0000-0000-0000-000000000007","30000000-0000-0000-0000-000000000001"]
+ERROR P0001: NO_ACTIVE_SUBSCRIPTION
+ROLLBACK after SQLSTATE P0001: NO_ACTIVE_SUBSCRIPTION
+SQL: SELECT public.verify_and_record_visit($1,$2,$3) AS verification
+fixture parameters: ["fixture-foreign","40000000-0000-0000-0000-000000000002","30000000-0000-0000-0000-000000000002"]
+ERROR 42501: SCAN_PERMISSION_REQUIRED
+ROLLBACK after SQLSTATE 42501: SCAN_PERMISSION_REQUIRED
+SQL: SELECT public.verify_and_record_visit($1,$2,$3) AS verification
+fixture parameters: ["fixture-branch","40000000-0000-0000-0000-000000000001","30000000-0000-0000-0000-000000000002"]
+ERROR 23503: BRANCH_GYM_MISMATCH
+ROLLBACK after SQLSTATE 23503: BRANCH_GYM_MISMATCH
+SQL: SELECT (SELECT count(*) FROM public.qr_nonces) AS nonces,(SELECT count(*) FROM public.visits) AS visits
+{"rows":[{"nonces":1,"visits":3}],"fields":[{"name":"nonces","dataTypeID":20},{"name":"visits","dataTypeID":20}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 06 inactive/expired/foreign member and foreign branch refused
+SQL: INSERT INTO public.members(id,gym_id,branch_id,full_name,phone) VALUES($1,$2,$3,'Fixture future member','40000008')
+fixture parameters: ["40000000-0000-0000-0000-000000000008","20000000-0000-0000-0000-000000000001","30000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[],"command":"INSERT","affectedRows":1,"rowCount":1}
+SQL: SELECT public.record_payment($1,$2,$3,$4::public.payment_method,$5,$6) AS payment
+fixture parameters: ["40000000-0000-0000-0000-000000000008","50000000-0000-0000-0000-000000000001",1500,"cash","FIXTURE","30000000-0000-0000-0000-000000000001"]
+{"rows":[{"payment":{"id":"dd5a9eca-2606-4fb2-b197-7fe12bb57964","gym_id":"20000000-0000-0000-0000-000000000001","member":{"id":"40000000-0000-0000-0000-000000000008","phone":"40000008","full_name":"Fixture future member"},"method":"cash","status":"completed","recorder":{"id":"10000000-0000-0000-0000-000000000002","full_name":"مستخدم جديد"},"member_id":"40000000-0000-0000-0000-000000000008","amount_mru":1500,"created_at":"2026-10-28T07:06:23.795+00:00","recorded_by":"10000000-0000-0000-0000-000000000002","cancelled_at":null,"cancelled_by":null,"subscription":{"id":"17590588-8694-451a-b840-16e5ef904e97","plan":{"id":"50000000-0000-0000-0000-000000000001","name":"Monthly A"},"end_date":"2026-11-27T07:06:23.794+00:00","start_date":"2026-10-28T07:06:23.794+00:00"},"subscription_id":"17590588-8694-451a-b840-16e5ef904e97","transaction_ref":"FIXTURE","cancellation_reason":null}}],"fields":[{"name":"payment","dataTypeID":3802}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: SELECT public.record_payment($1,$2,$3,$4::public.payment_method,$5,$6) AS payment
+fixture parameters: ["40000000-0000-0000-0000-000000000008","50000000-0000-0000-0000-000000000001",1500,"cash","FIXTURE","30000000-0000-0000-0000-000000000001"]
+{"rows":[{"payment":{"id":"3e852fe3-2882-422b-9cc6-3aa4e4f6a6f8","gym_id":"20000000-0000-0000-0000-000000000001","member":{"id":"40000000-0000-0000-0000-000000000008","phone":"40000008","full_name":"Fixture future member"},"method":"cash","status":"completed","recorder":{"id":"10000000-0000-0000-0000-000000000002","full_name":"مستخدم جديد"},"member_id":"40000000-0000-0000-0000-000000000008","amount_mru":1500,"created_at":"2026-10-28T07:06:23.802+00:00","recorded_by":"10000000-0000-0000-0000-000000000002","cancelled_at":null,"cancelled_by":null,"subscription":{"id":"8d3bccca-2298-45bd-b0f2-0d943ff2fe60","plan":{"id":"50000000-0000-0000-0000-000000000001","name":"Monthly A"},"end_date":"2026-12-27T07:06:23.794+00:00","start_date":"2026-11-27T07:06:23.794+00:00"},"subscription_id":"8d3bccca-2298-45bd-b0f2-0d943ff2fe60","transaction_ref":"FIXTURE","cancellation_reason":null}}],"fields":[{"name":"payment","dataTypeID":3802}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: UPDATE public.subscriptions SET status='cancelled' WHERE id=$1
+fixture parameters: ["17590588-8694-451a-b840-16e5ef904e97"]
+{"rows":[],"fields":[],"command":"UPDATE","affectedRows":1,"rowCount":1}
+SQL: SELECT public.verify_and_record_visit($1,$2,$3) AS verification
+fixture parameters: ["fixture-future","40000000-0000-0000-0000-000000000008","30000000-0000-0000-0000-000000000001"]
+ERROR P0001: NO_ACTIVE_SUBSCRIPTION
+ROLLBACK after SQLSTATE P0001: NO_ACTIVE_SUBSCRIPTION
+PASS 06 future-only subscription cannot enter before its start_date
+SQL: UPDATE public.gym_staff SET permissions=permissions || '{"can_scan_qr":false}'::jsonb WHERE user_id=$1 AND gym_id=$2
+fixture parameters: ["10000000-0000-0000-0000-000000000002","20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[],"command":"UPDATE","affectedRows":1,"rowCount":1}
+SQL: SELECT public.verify_and_record_visit($1,$2,$3) AS verification
+fixture parameters: ["fixture-denied","40000000-0000-0000-0000-000000000001","30000000-0000-0000-0000-000000000001"]
+ERROR 42501: SCAN_PERMISSION_REQUIRED
+ROLLBACK after SQLSTATE 42501: SCAN_PERMISSION_REQUIRED
+PASS 06 scan permission enforced inside RPC
+SQL: UPDATE public.gym_staff SET permissions=permissions || '{"can_scan_qr":true}'::jsonb WHERE user_id=$1 AND gym_id=$2
+fixture parameters: ["10000000-0000-0000-0000-000000000002","20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[],"command":"UPDATE","affectedRows":1,"rowCount":1}
+SQL: UPDATE public.gyms SET status='suspended' WHERE id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[],"command":"UPDATE","affectedRows":1,"rowCount":1}
+SQL: SELECT public.verify_and_record_visit($1,$2,$3) AS verification
+fixture parameters: ["fixture-suspended","40000000-0000-0000-0000-000000000001","30000000-0000-0000-0000-000000000001"]
+ERROR 42501: GYM_SUSPENDED
+ROLLBACK after SQLSTATE 42501: GYM_SUSPENDED
+PASS 06 suspended gym refuses scan even for super admin RPC
+SQL: UPDATE public.gyms SET status='active' WHERE id=$1
+fixture parameters: ["20000000-0000-0000-0000-000000000001"]
+{"rows":[],"fields":[],"command":"UPDATE","affectedRows":1,"rowCount":1}
+SQL: INSERT INTO public.visits(gym_id,member_id,branch_id,scanned_by,method) VALUES($1,$2,$3,$4,'manual') RETURNING id
+fixture parameters: ["20000000-0000-0000-0000-000000000001","40000000-0000-0000-0000-000000000001","30000000-0000-0000-0000-000000000001","10000000-0000-0000-0000-000000000002"]
+{"rows":[{"id":"10868513-2985-4420-9c13-37f0af3d600d"}],"fields":[{"name":"id","dataTypeID":2950}],"command":"INSERT","affectedRows":1,"rowCount":1}
+PASS 06 manual entry fallback still validates active subscription
+SQL: SELECT md5(jsonb_agg(to_jsonb(p) ORDER BY p.id)::text) AS payments FROM public.payments p
+{"rows":[{"payments":"c9f3d4a02cfbf664ff69878f225ac006"}],"fields":[{"name":"payments","dataTypeID":25}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: SELECT md5(jsonb_agg(to_jsonb(p) ORDER BY p.id)::text) AS payments FROM public.payments p
+{"rows":[{"payments":"c9f3d4a02cfbf664ff69878f225ac006"}],"fields":[{"name":"payments","dataTypeID":25}],"command":"SELECT","affectedRows":0,"rowCount":1}
+SQL: SELECT relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind='r' AND NOT c.relrowsecurity
+{"rows":[],"fields":[{"name":"relname","dataTypeID":19}],"command":"SELECT","affectedRows":0,"rowCount":0}
+SQL: SELECT has_function_privilege('anon','public.record_payment(uuid,uuid,integer,public.payment_method,text,uuid)','EXECUTE') AS payment,has_function_privilege('anon','public.verify_and_record_visit(text,uuid,uuid)','EXECUTE') AS scan
+{"rows":[{"payment":false,"scan":false}],"fields":[{"name":"payment","dataTypeID":16},{"name":"scan","dataTypeID":16}],"command":"SELECT","affectedRows":0,"rowCount":1}
+PASS 06 all six patches can be reapplied to populated data without changing records
+LOCAL SQL RESULT: 41 passed, 0 failed; applied steps 01..06

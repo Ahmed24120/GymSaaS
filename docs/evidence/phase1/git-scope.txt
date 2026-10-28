@@ -1,0 +1,12 @@
+UTC: 2026-10-28T08:27:37.050Z
+Base: c5228b197b79d2fd0abd15824a1c40bfac732a21
+SQL HEAD: 21630f9aa14853f5dc7e58c68e11a3073e8bcfcb
+git diff c5228b1 --name-only -- apps supabase/migrations supabase/seed.sql:
+(empty)
+git status --porcelain --untracked-files=all:
+M BUGS.md
+ M HANDOFF.md
+ M TESTING.md
+ M docs/evidence/phase1/06-web-check.txt
+?? docs/RAPPORT_PHASE_1.md
+PASS: no app source, app tests, migrations or seed changes

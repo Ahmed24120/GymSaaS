@@ -1,4 +1,4 @@
-UTC: 2026-10-28T07:07:35.652Z
+UTC: 2026-10-28T08:26:42.747Z
 Step: 06
 Phase 1 exception: exactly five existing failures allowed; no app/test source changes.
 npm run check exit=1
@@ -10,23 +10,23 @@ npm run check exit=1
 
  RUN  v5.0.5 C:/Users/hp/Desktop/GymSaaS/apps/web
 
- ❯ src/__tests__/qrReleaseGates.test.ts (5 tests | 3 failed) 21ms
+ ❯ src/__tests__/qrReleaseGates.test.ts (5 tests | 3 failed) 16ms
    ❯ QR release gates — real route with stubbed database responses (5)
-     × BUG-QR-01: denies entry when persistent nonce storage is missing 8ms
-     × BUG-QR-01: denies entry when nonce insertion is forbidden 2ms
-     × BUG-QR-02: denies entry when visit insertion fails 2ms
- ❯ src/__tests__/paymentReleaseGates.test.ts (2 tests | 2 failed) 9ms
+     × BUG-QR-01: denies entry when persistent nonce storage is missing 5ms
+     × BUG-QR-01: denies entry when nonce insertion is forbidden 1ms
+     × BUG-QR-02: denies entry when visit insertion fails 1ms
+ ❯ src/__tests__/paymentReleaseGates.test.ts (2 tests | 2 failed) 8ms
    ❯ Payment release gates — stubbed persistence, no real transactions (2)
-     × BUG-PAY-01: does not leave an activated subscription after payment rejection 7ms
+     × BUG-PAY-01: does not leave an activated subscription after payment rejection 6ms
      × BUG-PAY-02: rejects fractional MRU without activating subscription 1ms
 
  Test Files  2 failed | 8 passed (10)
       Tests  5 failed | 49 passed (54)
-   Start at  07:06:30
-   Duration  1.47s (import 49%, tests 19%, worker 17%, transform 14%)
+   Start at  08:26:10
+   Duration  2.14s (import 48%, tests 20%, transform 17%, worker 14%)
 
-    Isolate  10 workers spawned · ~95ms startup each (spawn + environment, per file)
-             at least ~853ms faster with isolate: false — reuses workers across files instead of one per file
+    Isolate  10 workers spawned · ~106ms startup each (spawn + environment, per file)
+             at least ~954ms faster with isolate: false — reuses workers across files instead of one per file
 
 
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯

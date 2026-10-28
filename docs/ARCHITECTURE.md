@@ -1,6 +1,6 @@
 # معمارية GymSaaS — مرجع مختصر
 
-منصة واحدة لصالـات مستقلة في موريتانيا. الويب في `apps/web` يستعمل Next.js App Router وTypeScript؛ الجوال في `apps/mobile` يستعمل Expo. Supabase يوفر Auth وPostgreSQL وStorage. العربية RTL، المبالغ أعداد صحيحة بعملة MRU، والتواريخ `timestamptz` مع عرض وحساب تقويمي في `Africa/Nouakchott`.
+منصة واحدة لصالات مستقلة في موريتانيا. الويب في `apps/web` يستعمل Next.js App Router وTypeScript؛ الجوال في `apps/mobile` يستعمل Expo. Supabase يوفر Auth وPostgreSQL وStorage. العربية RTL، المبالغ أعداد صحيحة بعملة MRU، والتواريخ `timestamptz` مع عرض وحساب تقويمي في `Africa/Nouakchott`.
 
 ## الجداول والعلاقات
 

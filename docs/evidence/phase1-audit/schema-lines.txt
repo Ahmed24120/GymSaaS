@@ -1,0 +1,18 @@
+﻿475:CREATE TRIGGER trg_calculate_subscription_end_date
+476-    BEFORE INSERT ON public.subscriptions
+477-    FOR EACH ROW EXECUTE FUNCTION public.calculate_subscription_end_date();
+18:CREATE TYPE member_status AS ENUM ('active', 'inactive', 'expired');
+34:CREATE TABLE public.gyms (
+45:CREATE TABLE public.branches (
+68:CREATE TABLE public.gym_staff (
+82:CREATE TABLE public.members (
+90:    status member_status NOT NULL DEFAULT 'inactive',
+96:CREATE TABLE public.plans (
+109:CREATE TABLE public.subscriptions (
+123:CREATE TABLE public.payments (
+140:CREATE TABLE public.visits (
+153:CREATE TABLE public.announcements (
+164:CREATE TABLE public.notifications (
+176:CREATE TABLE public.audit_logs (
+189:CREATE TABLE public.platform_subscriptions (
+217:CREATE TABLE public.qr_nonces (

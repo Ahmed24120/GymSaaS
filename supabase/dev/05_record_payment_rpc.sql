@@ -9,6 +9,21 @@ DO $$ BEGIN
     IF to_regprocedure('public.has_staff_permission(uuid,text)') IS NULL THEN RAISE EXCEPTION 'APPLY_04_FIRST'; END IF;
 END $$;
 
+-- موجود في المخطط الأصلي في الأسطر475–477؛ يُعاد إنشاؤه أيضًا لإصلاح انحراف قاعدة الاختبار.
+-- الدالة موجودة في المخطط الأصلي، ويستبدل تعريفها أدناه داخل المعاملة نفسها.
+DROP TRIGGER IF EXISTS trg_calculate_subscription_end_date ON public.subscriptions;
+CREATE TRIGGER trg_calculate_subscription_end_date BEFORE INSERT ON public.subscriptions
+    FOR EACH ROW EXECUTE FUNCTION public.calculate_subscription_end_date();
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger
+        WHERE tgrelid='public.subscriptions'::regclass
+          AND tgname='trg_calculate_subscription_end_date'
+          AND tgfoid='public.calculate_subscription_end_date()'::regprocedure
+          AND tgtype=7 AND tgenabled='O' AND NOT tgisinternal) THEN
+        RAISE EXCEPTION '05_DATE_TRIGGER_MISSING_OR_INVALID: expected enabled BEFORE INSERT FOR EACH ROW';
+    END IF;
+END $$;
+
 CREATE UNIQUE INDEX IF NOT EXISTS uq_branches_gym_id_id ON public.branches(gym_id,id);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_members_gym_id_id ON public.members(gym_id,id);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_plans_gym_id_id ON public.plans(gym_id,id);

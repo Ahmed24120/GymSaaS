@@ -58,7 +58,7 @@ export default function PaymentsPage() {
 
   const handlePaymentCancelled = (updatedPayment: PaymentRecord) => {
     setPayments((prev) =>
-      prev.map((p) => (p.id === updatedPayment.id ? updatedPayment : p))
+      prev.map((p) => (p.id === updatedPayment.id ? { ...p, ...updatedPayment } : p))
     );
   };
 

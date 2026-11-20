@@ -1,7 +1,7 @@
 # LIVE_STATUS
-HEURE: 11:32 GMT (départ 11:24, 2026-11-20)
-FAIT: Phase 0 (audit SQL, 00/07/08, demo corrigé) ; Phase 1 items 1-6 -> npm run check VERT (tests/evidence/check_phase1.txt: tsc, lint, 68 tests, build)
-EN COURS: rien (attente Ahmed)
-PROCHAIN: STAFF-01/SCAN-01 (optionnel), puis 09_proofs.sql après "SQL B ok"
-ATTEND AHMED: PACK SQL A puis PACK SQL B
-RISQUES: contrat QR mobile dupliqué; annulation paiement ≠ annulation abonnement; visites offline non gérées
+HEURE: voir git log (départ 11:24 GMT, 2026-11-20)
+FAIT: Phase 0 + Phase 1 (check vert: tests/evidence/check_phase1.txt); 09_proofs.sql + 10_cancel_payment_subscription.sql écrits et répétés en local PGlite (75/75, tests/evidence/local_rehearsal.txt — émulation, pas Supabase); cancelPayment via RPC (70 tests vitest verts)
+EN COURS: rien
+PROCHAIN: "SQL A ok" -> Pack B (05, 06, 10) -> 09_proofs.sql sur Supabase ; SCAN-01 seulement si temps
+ATTEND AHMED: PACK SQL A (00,01,02,03,04,dev_users,demo_data,07,08)
+RISQUES: preuves locales != Supabase réel; STAFF-01/SCAN-01 reportés

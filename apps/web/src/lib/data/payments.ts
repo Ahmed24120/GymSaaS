@@ -107,26 +107,13 @@ export async function cancelPayment(
       };
     }
 
-    // Soft-cancel: Never delete physically, update status, cancelled_by, cancelled_at, and reason.
-    // Trigger trg_audit_payments automatically logs this update to public.audit_logs!
-    const { data, error } = await supabase
-      .from('payments')
-      .update({
-        status: 'cancelled',
-        cancelled_by: user.id,
-        cancelled_at: new Date().toISOString(),
-        cancellation_reason: reason.trim(),
-      })
-      .eq('id', paymentId)
-      .select(`
-        *,
-        member:members(id, full_name, phone),
-        subscription:subscriptions(id, start_date, end_date, plan:plans(id, name)),
-        canceller:profiles!payments_cancelled_by_fkey(id, full_name)
-      `)
-      .single();
-
-    if (error) return { ok: false, error: toAppError(error) };
+    // RPC cancel_payment (10_cancel_payment_subscription.sql) : annule le paiement ET l'abonnement lié
+    // dans une seule transaction ; permission can_cancel_payments, audit par les triggers.
+    const { data, error } = await supabase.rpc('cancel_payment', {
+      p_payment_id: paymentId,
+      p_reason: reason.trim(),
+    });
+    if (error || !data) return { ok: false, error: toAppError(error ?? new Error('cancel_payment: réponse vide')) };
     return { ok: true, value: data as PaymentRecord };
   } catch (err) {
     return { ok: false, error: toAppError(err) };

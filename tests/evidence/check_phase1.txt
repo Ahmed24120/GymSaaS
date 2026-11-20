@@ -8,19 +8,17 @@
 
 
  Test Files  11 passed (11)
-      Tests  68 passed (68)
-   Start at  11:30:08
-   Duration  1.74s (import 58%, tests 19%, worker 14%, transform 8%)
+      Tests  70 passed (70)
+   Start at  11:42:57
+   Duration  2.05s (import 59%, tests 17%, worker 13%, transform 10%)
 
-    Isolate  11 workers spawned · ~102ms startup each (spawn + environment, per file)
-             at least ~1.02s faster with isolate: false — reuses workers across files instead of one per file
+    Isolate  11 workers spawned · ~122ms startup each (spawn + environment, per file)
+             at least ~1.22s faster with isolate: false — reuses workers across files instead of one per file
 
   ▲ Next.js 14.2.35
   - Environments: .env.local
 
    Creating an optimized production build ...
-<w> [webpack.cache.PackFileCacheStrategy] Serializing big strings (114kiB) impacts deserialization performance (consider using Buffer instead and decode when needed)
-<w> [webpack.cache.PackFileCacheStrategy] Serializing big strings (268kiB) impacts deserialization performance (consider using Buffer instead and decode when needed)
  ✓ Compiled successfully
    Linting and checking validity of types ...
    Collecting page data ...
@@ -42,8 +40,8 @@ Route (app)                              Size     First Load JS
 ├ ○ /dashboard/audit                     5.42 kB         166 kB
 ├ ○ /dashboard/branches                  7.57 kB         163 kB
 ├ ○ /dashboard/import-excel              146 kB          306 kB
-├ ○ /dashboard/members                   4.18 kB         175 kB
-├ ○ /dashboard/payments                  4.69 kB         177 kB
+├ ○ /dashboard/members                   4.15 kB         175 kB
+├ ○ /dashboard/payments                  4.67 kB         177 kB
 ├ ○ /dashboard/plans                     7.9 kB          164 kB
 ├ ○ /dashboard/reception                 8.6 kB          168 kB
 ├ ○ /dashboard/reports                   6.72 kB         167 kB

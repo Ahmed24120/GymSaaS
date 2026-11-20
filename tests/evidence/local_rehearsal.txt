@@ -1,0 +1,92 @@
+OK   seed.sql
+OK   00_preflight
+OK   01_profiles_lockdown
+OK   02_qr_nonces_hardening
+OK   03_gym_status_guard
+OK   04_permissions_enforcement
+OK   dev_users
+OK   demo_data
+OK   demo_data (2e fois, idempotence)
+OK   07_gym_b_fixture
+OK   08_dev_permissions
+OK   05_record_payment_rpc
+OK   06_nonce_visit_atomic
+OK   10_cancel_payment_subscription
+PASS 00 auth.uid() = UUID simulé (owner) | obtenu: true
+PASS b1 réception: UPDATE profiles.is_super_admin refusé (état final) | obtenu: false
+PASS b2 réponse de l'UPDATE (0 ligne ou erreur) | obtenu: ERR:42501:ADMIN_FLAG_CHANGE_FORBIDDEN
+PASS c0 owner A voit ses membres (contrôle positif) | obtenu: 40
+PASS c1 owner A lit members de B | obtenu: 0
+PASS c2 owner A lit payments de B | obtenu: 0
+PASS c3 owner A lit subscriptions de B | obtenu: 0
+PASS c4 owner A lit visits de B | obtenu: 0
+PASS c5 owner A UPDATE members de B | obtenu: OK:0
+PASS c6 owner A DELETE members de B | obtenu: OK:0
+PASS c7 owner A UPDATE payments de B | obtenu: OK:0
+PASS c8 owner A DELETE payments de B | obtenu: ERR:42501:permission denied for table payments
+PASS c9 owner A UPDATE subscriptions de B | obtenu: OK:0
+PASS c10 owner A DELETE subscriptions de B | obtenu: ERR:42501:permission denied for table subscriptions
+PASS c11 owner A UPDATE/DELETE visits de B | obtenu: OK:0
+PASS c12 owner A record_payment sur membre de B | obtenu: ERR:42501:RECORD_PAYMENT_FORBIDDEN
+PASS c13 owner A scanne un membre de B | obtenu: ERR:42501:SCAN_PERMISSION_REQUIRED
+PASS c14 données B intactes après les tentatives | obtenu: عضو الصالة B
+PASS c15 paiement B toujours présent | obtenu: 1
+PASS c16 staff B lit members de A | obtenu: 0
+PASS c17 staff B UPDATE members de A | obtenu: OK:0
+PASS c18 staff B DELETE payments de A | obtenu: ERR:42501:permission denied for table payments
+PASS d0 mise en suspension de la salle A (setup) | obtenu: OK:1
+PASS d1 staff: membres visibles salle suspendue | obtenu: 0
+PASS d2 staff: record_payment refusé | obtenu: ERR:42501:RECORD_PAYMENT_FORBIDDEN
+PASS d3 staff: scan refusé | obtenu: ERR:42501:SCAN_PERMISSION_REQUIRED
+PASS d4 membre: sa propre fiche invisible salle suspendue | obtenu: 0
+PASS d5 membre: abonnements invisibles salle suspendue | obtenu: 0
+PASS d6 réactivation de la salle A (setup) | obtenu: OK:1
+PASS e1 record_payment 1500 réussit (renouvellement) | obtenu: true
+PASS e2 montant enregistré | obtenu: 1500
+PASS e3 renouvellement conserve les jours restants (nouvelle fin - ancienne fin) | obtenu: 30 days
+PASS e4 nouveau membre naît non actif | obtenu: inactive
+PASS e5 paiement du nouveau membre | obtenu: true
+PASS e6 le membre devient actif via record_payment uniquement | obtenu: active
+PASS e7 échec forcé après insertion de l'abonnement | obtenu: ERR:P0001:FORCED_FAILURE
+PASS e8 aucun abonnement partiel | obtenu: 0
+PASS e9 aucun paiement partiel | obtenu: 0
+PASS e10 statut membre inchangé | obtenu: inactive
+PASS e11 aucune ligne d'audit partielle (members UPDATE) | obtenu: 0
+PASS e12 1500.5 refusé | obtenu: ERR:42883:function public.record_payment(unknown, unknown, numeric, unknown) does not exis
+PASS e13 montant 0 refusé | obtenu: ERR:22023:POSITIVE_INTEGER_MRU_REQUIRED
+PASS e14 plan d'une autre salle refusé | obtenu: ERR:23503:PLAN_GYM_MISMATCH_OR_INACTIVE
+PASS e15 toujours aucun abonnement après les refus | obtenu: 0
+PASS f0 avant annulation: la visite est acceptée (contrôle positif) | obtenu: {"member": {"id": "fce7ddac-4e0c-4573-8950-5f3605eafb54", "phone": "39999991", "full_name"
+PASS f1 motif trop court refusé | obtenu: ERR:22023:CANCELLATION_REASON_REQUIRED
+PASS f2 annulation avec motif | obtenu: {"id": "7fe2c436-7fb4-413f-984a-75f90b04eb19", "gym_id": "a0000000-0000-0000-0000-00000000
+PASS f3 DELETE payments refusé | obtenu: ERR:42501:permission denied for table payments
+PASS f4 UPDATE montant refusé | obtenu: ERR:42501:PAYMENT_ONLY_SOFT_CANCEL_ALLOWED
+PASS f5 UPDATE audit_logs refusé | obtenu: ERR:42501:permission denied for table audit_logs
+PASS f6 DELETE audit_logs refusé | obtenu: ERR:42501:permission denied for table audit_logs
+PASS f7 ré-annulation refusée | obtenu: ERR:22023:PAYMENT_NOT_CANCELLABLE
+PASS f8 après annulation: entrée refusée (NO_ACTIVE_SUBSCRIPTION) | obtenu: ERR:P0001:NO_ACTIVE_SUBSCRIPTION
+PASS f9 paiement soft-cancelled (statut conservé, ligne non supprimée) | obtenu: cancelled
+PASS f10 abonnement lié passé à cancelled | obtenu: cancelled
+PASS f11 audit_logs: motif + exécutant de l'annulation | obtenu: 1
+PASS f12 audit_logs: abonnement annulé tracé | obtenu: 1
+PASS g0 retrait des permissions de la réception (setup) | obtenu: OK:1
+PASS g1 réception sans can_record_payments refusée | obtenu: ERR:42501:RECORD_PAYMENT_FORBIDDEN
+PASS g2 réception sans can_scan_qr refusée | obtenu: ERR:42501:SCAN_PERMISSION_REQUIRED
+PASS g3 restauration des permissions (setup) | obtenu: OK:1
+PASS g4 réception avec la permission peut encaisser | obtenu: true
+PASS g5 réception ne peut pas annuler un paiement | obtenu: ERR:42501:CANCEL_PAYMENT_FORBIDDEN
+PASS g6 réception ne peut pas changer un prix | obtenu: OK:0
+PASS g7 réception ne peut pas créer un plan | obtenu: ERR:42501:new row violates row-level security policy for table "plans"
+PASS g8 prix du plan inchangé | obtenu: 1500
+PASS g9 paiement de la réception toujours completed | obtenu: completed
+PASS a1 premier scan d'un nonce | obtenu: {"member": {"id": "d0000000-0000-0000-0000-000000000004", "phone": "41223344", "full_name"
+PASS a2 même nonce rejoué refusé (REPLAY) | obtenu: ERR:23505:REPLAY
+PASS a3 membre expiré refusé | obtenu: ERR:P0001:INACTIVE_MEMBER
+PASS a4 un seul enregistrement de visite pour le nonce rejoué | obtenu: 1
+PASS m1 membre voit uniquement sa fiche | obtenu: 1
+PASS m2 membre ne voit aucun paiement d'un autre | obtenu: 0
+PASS m3 membre ne peut pas enregistrer un paiement | obtenu: ERR:42501:RECORD_PAYMENT_FORBIDDEN
+PASS m4 membre ne peut pas scanner | obtenu: ERR:42501:SCAN_PERMISSION_REQUIRED
+TOTAL 75 FAIL 0
+STATUS d..001-010: "001:active 002:expired 003:active 004:active 005:active 006:active 007:active 008:active 009:active 010:active"
+Traces restantes après ROLLBACK: {"proof_members":0,"proof_visits":0}

@@ -62,3 +62,16 @@ describe('Non-régression paiements : RPC seulement, entiers stricts', () => {
     });
   }
 });
+
+import { cancelPayment } from '../lib/data/payments';
+describe('Non-régression annulation : RPC cancel_payment uniquement', () => {
+  it('appelle cancel_payment avec le motif nettoyé (pas d\'UPDATE direct)', async () => {
+    const res = await cancelPayment('pay-1', '  motif valable  ');
+    expect(res.ok).toBe(true);
+    expect(rpcState.calls[0]).toEqual({ name: 'cancel_payment', args: { p_payment_id: 'pay-1', p_reason: 'motif valable' } });
+  });
+  it('rejette un motif < 3 caractères sans appeler la base', async () => {
+    expect((await cancelPayment('pay-1', 'ab')).ok).toBe(false);
+    expect(rpcState.calls.length).toBe(0);
+  });
+});

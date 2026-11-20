@@ -76,7 +76,6 @@ export default function RecordPaymentModal({
     const res = await recordPayment({
       member_id: memberId,
       plan_id: selectedPlan.id,
-      duration_days: selectedPlan.duration_days,
       amount_mru: intAmount,
       method,
       transaction_ref: transactionRef.trim() || undefined,

@@ -1,170 +1,68 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabase } from '@/lib/supabase/server';
+import { getRequestContext } from '@/lib/supabase/request';
 import { verifySignedQR } from '@/lib/services/qrSecurity';
-import { QRVerifyRequest, QRVerifyResponse } from '@/lib/qr/contract';
+import { QRVerifyAllowed, QRVerifyDenied, QRVerifyRequest } from '@/lib/qr/contract';
+
+function deny(status: number, errorCode: QRVerifyDenied['errorCode'], error: string) {
+  const body: QRVerifyDenied = { allowed: false, error, errorCode };
+  return NextResponse.json(body, { status });
+}
+
+/** Traduit toute erreur du RPC verify_and_record_visit en refus explicite (jamais d'entrée inventée). */
+function mapRpcError(err: { code?: string; message?: string }) {
+  const code = err.code ?? '';
+  const msg = err.message ?? '';
+  if (code === '23505' || msg.includes('REPLAY')) {
+    return deny(409, 'REPLAY', 'تم استخدام رمز الـ QR هذا مسبقاً');
+  }
+  if (code === '42501') {
+    if (msg.includes('GYM_SUSPENDED')) return deny(403, 'GYM_SUSPENDED', 'الصالة معلّقة');
+    if (msg.includes('UNAUTHENTICATED')) return deny(401, 'UNAUTHENTICATED', 'جلسة العمل غير صالحة');
+    return deny(403, 'FORBIDDEN', 'ليست لديك صلاحية مسح الرموز لهذه الصالة');
+  }
+  if (code === 'P0001') {
+    if (msg.includes('NO_ACTIVE_SUBSCRIPTION')) return deny(200, 'NO_SUBSCRIPTION', 'لا يوجد اشتراك سارٍ لهذا المشترك أو انتهت مدته');
+    return deny(200, 'INACTIVE_MEMBER', 'حساب المشترك غير نشط');
+  }
+  if (code === 'PGRST205' || code === 'PGRST202' || code === '42P01' || code === '42883') {
+    return deny(503, 'SERVICE_UNAVAILABLE', 'خدمة التحقق غير مهيأة في قاعدة البيانات');
+  }
+  return deny(500, 'SERVER_ERROR', 'تعذر تسجيل الدخول؛ حاول مجدداً');
+}
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createServerSupabase();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
+    const { supabase, user, authError } = await getRequestContext(request);
     if (authError || !user) {
-      const denied: QRVerifyResponse = {
-        allowed: false,
-        error: 'جلسة العمل غير صالحة. يرجى تسجيل الدخول أولاً',
-        errorCode: 'UNAUTHENTICATED',
-      };
-      return NextResponse.json(denied, { status: 401 });
+      return deny(401, 'UNAUTHENTICATED', 'جلسة العمل غير صالحة. يرجى تسجيل الدخول أولاً');
     }
 
-    const body: QRVerifyRequest = await request.json();
-
-    if (!body || !body.token) {
-      const denied: QRVerifyResponse = {
-        allowed: false,
-        error: 'رمز الـ QR مفقود في الطلب',
-        errorCode: 'MALFORMED',
-      };
-      return NextResponse.json(denied, { status: 400 });
+    const body: QRVerifyRequest = await request.json().catch(() => null as any);
+    if (!body || !body.token || typeof body.token !== 'string') {
+      return deny(400, 'MALFORMED', 'رمز الـ QR مفقود في الطلب');
     }
 
-    // 1. Cryptographic HMAC verification & 30s window check
+    // HMAC (timingSafeEqual) + fenêtre de 30 s
     const verification = verifySignedQR(body.token, 30);
-
     if (!verification.valid || !verification.payload) {
-      const denied: QRVerifyResponse = {
-        allowed: false,
-        error: verification.error || 'رمز الـ QR غير صالح أو منتهي الصلاحية',
-        errorCode: verification.errorCode || 'INVALID_SIGNATURE',
-      };
-      return NextResponse.json(denied, { status: 400 });
+      return deny(400, verification.errorCode || 'INVALID_SIGNATURE', verification.error || 'رمز الـ QR غير صالح أو منتهي الصلاحية');
     }
+    const { member_id, nonce } = verification.payload;
 
-    const { gym_id, member_id, nonce } = verification.payload;
+    // Anti-rejeu, membre, abonnement et visite : une seule transaction côté base.
+    const { data, error } = await supabase.rpc('verify_and_record_visit', {
+      p_nonce: nonce,
+      p_member_id: member_id,
+      p_branch_id: body.branch_id ?? null,
+    });
+    if (error) return mapRpcError(error);
 
-    // 2. Anti-Replay: Check if nonce already exists in public.qr_nonces
-    const { data: existingNonce } = await supabase
-      .from('qr_nonces')
-      .select('nonce')
-      .eq('nonce', nonce)
-      .maybeSingle();
-
-    if (existingNonce) {
-      const denied: QRVerifyResponse = {
-        allowed: false,
-        error: 'تم استخدام رمز الـ QR هذا مسبقاً (هجوم إعادة استخدام مرفوض)',
-        errorCode: 'REPLAY',
-      };
-      return NextResponse.json(denied, { status: 409 });
+    const result = data as QRVerifyAllowed | null;
+    if (!result || result.allowed !== true || !result.visit_id) {
+      return deny(500, 'SERVER_ERROR', 'استجابة غير متوقعة من خدمة التحقق');
     }
-
-    // 3. Insert nonce to block any replay attack permanently
-    const { error: nonceInsertError } = await supabase
-      .from('qr_nonces')
-      .insert({
-        nonce,
-        gym_id,
-        member_id,
-        used_at: new Date().toISOString(),
-      });
-
-    if (nonceInsertError) {
-      // If primary key collision occurred concurrently
-      if (nonceInsertError.code === '23505') {
-        const denied: QRVerifyResponse = {
-          allowed: false,
-          error: 'تم استخدام رمز الـ QR هذا في اللحظة ذاتها (محاولة تكرار)',
-          errorCode: 'REPLAY',
-        };
-        return NextResponse.json(denied, { status: 409 });
-      }
-    }
-
-    // 4. Verify member status in database
-    const { data: member, error: memberErr } = await supabase
-      .from('members')
-      .select('id, full_name, phone, status')
-      .eq('id', member_id)
-      .maybeSingle();
-
-    if (memberErr || !member) {
-      const denied: QRVerifyResponse = {
-        allowed: false,
-        error: 'لم يتم العثور على سجل المشترك في قاعدة البيانات',
-        errorCode: 'INACTIVE_MEMBER',
-      };
-      return NextResponse.json(denied, { status: 200 });
-    }
-
-    if (member.status !== 'active') {
-      const denied: QRVerifyResponse = {
-        allowed: false,
-        error: `حساب المشترك غير نشط (الحالة الحالية: ${member.status})`,
-        errorCode: 'INACTIVE_MEMBER',
-      };
-      return NextResponse.json(denied, { status: 200 });
-    }
-
-    // 5. Verify active subscription with end_date > now()
-    const nowIso = new Date().toISOString();
-    const { data: subscriptions } = await supabase
-      .from('subscriptions')
-      .select('id, end_date, status, plan:plans(name)')
-      .eq('member_id', member_id)
-      .eq('status', 'active')
-      .gte('end_date', nowIso)
-      .order('end_date', { ascending: false })
-      .limit(1);
-
-    const activeSub = subscriptions && subscriptions.length > 0 ? subscriptions[0] : null;
-
-    if (!activeSub) {
-      const denied: QRVerifyResponse = {
-        allowed: false,
-        error: 'لا يوجد اشتراك سارٍ لهذا المشترك أو انتهت مدة الاشتراك',
-        errorCode: 'NO_SUBSCRIPTION',
-      };
-      return NextResponse.json(denied, { status: 200 });
-    }
-
-    // 6. Record successful entry into public.visits
-    const { data: visitRecord, error: visitErr } = await supabase
-      .from('visits')
-      .insert({
-        gym_id,
-        member_id,
-        branch_id: body.branch_id || null,
-        scanned_by: user.id,
-        method: 'qr',
-        source: 'online',
-        entered_at: nowIso,
-      })
-      .select('id')
-      .single();
-
-    const planName = (activeSub.plan as any)?.name || 'اشتراك رياضي';
-
-    const allowedResponse: QRVerifyResponse = {
-      allowed: true,
-      member: {
-        id: member.id,
-        full_name: member.full_name,
-        phone: member.phone,
-      },
-      subscription: {
-        end_date: activeSub.end_date,
-        plan_name: planName,
-      },
-      visit_id: visitRecord?.id || 'vis-recorded',
-    };
-
-    return NextResponse.json(allowedResponse, { status: 200 });
-  } catch (err: any) {
-    const errorResponse: QRVerifyResponse = {
-      allowed: false,
-      error: err.message || 'حدث خطأ تقني في التحقق من الرمز',
-      errorCode: 'SERVER_ERROR',
-    };
-    return NextResponse.json(errorResponse, { status: 500 });
+    return NextResponse.json(result, { status: 200 });
+  } catch {
+    return deny(500, 'SERVER_ERROR', 'حدث خطأ تقني في التحقق من الرمز');
   }
 }

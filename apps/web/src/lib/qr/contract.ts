@@ -38,7 +38,7 @@ export interface QRVerifyAllowed {
 export interface QRVerifyDenied {
   allowed: false;
   error: string;
-  errorCode: 'EXPIRED' | 'INVALID_SIGNATURE' | 'MALFORMED' | 'FUTURE_TIMESTAMP' | 'REPLAY' | 'INACTIVE_MEMBER' | 'NO_SUBSCRIPTION' | 'UNAUTHENTICATED' | 'SERVER_ERROR';
+  errorCode: 'EXPIRED' | 'INVALID_SIGNATURE' | 'MALFORMED' | 'FUTURE_TIMESTAMP' | 'REPLAY' | 'INACTIVE_MEMBER' | 'NO_SUBSCRIPTION' | 'UNAUTHENTICATED' | 'FORBIDDEN' | 'GYM_SUSPENDED' | 'SERVICE_UNAVAILABLE' | 'SERVER_ERROR';
 }
 
 export type QRVerifyResponse = QRVerifyAllowed | QRVerifyDenied;

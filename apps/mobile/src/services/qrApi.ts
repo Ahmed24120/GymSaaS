@@ -3,6 +3,15 @@
  * RÈGLE ABSOLUE : Jamais de secret local. Tout passe par l'API déployée.
  */
 
+import { supabase } from './supabase';
+
+/** En-têtes d'authentification : le jeton d'accès Supabase de l'utilisateur (RLS appliquée côté serveur). */
+async function authHeaders(): Promise<Record<string, string>> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export interface QRTokenResponse {
   token: string;
   member_id: string;
@@ -34,6 +43,7 @@ export async function fetchSignedQRToken(memberId: string): Promise<FetchQRResul
       method: 'GET',
       headers: {
         'Accept': 'application/json',
+        ...(await authHeaders()),
       },
     });
 
@@ -69,6 +79,7 @@ export async function verifySignedQRToken(token: string, branchId?: string): Pro
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
+        ...(await authHeaders()),
       },
       body: JSON.stringify({ token, branch_id: branchId }),
     });

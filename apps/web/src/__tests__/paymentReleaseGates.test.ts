@@ -3,6 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({ activated: false, paymentFails: false, amount: 0 }));
 vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({
   auth: { getUser: async () => ({ data: { user: { id: 'employee' } } }) },
+  // record_payment est désormais un RPC atomique : le mock expose rpc() ; assertions inchangées.
+  rpc: async (_name: string, args: any) => {
+    state.amount = args.p_amount_mru;
+    return state.paymentFails ? { data: null, error: { message: 'insert denied' } } : { data: { id: 'payment', amount_mru: args.p_amount_mru }, error: null };
+  },
   from: () => {
     const chain: any = { insert: (value: any) => { state.amount = value.amount_mru; return chain; }, select: () => chain,
       single: async () => ({ data: state.paymentFails ? null : { id: 'payment', amount_mru: state.amount },

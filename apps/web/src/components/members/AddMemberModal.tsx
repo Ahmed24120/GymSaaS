@@ -81,7 +81,6 @@ export default function AddMemberModal({ isOpen, onClose, onSuccess }: AddMember
       const payRes = await recordPayment({
         member_id: createdMember.id,
         plan_id: selectedPlan.id,
-        duration_days: selectedPlan.duration_days,
         amount_mru: selectedPlan.price_mru,
         method: paymentMethod,
         transaction_ref: transactionRef.trim() || undefined,

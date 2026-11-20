@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabase } from '@/lib/supabase/server';
+import { getRequestContext } from '@/lib/supabase/request';
 import { generateSignedQR } from '@/lib/services/qrSecurity';
 import { QRTokenResponse } from '@/lib/qr/contract';
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createServerSupabase();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const { supabase, user, authError } = await getRequestContext(request);
 
     if (authError || !user) {
       return NextResponse.json(

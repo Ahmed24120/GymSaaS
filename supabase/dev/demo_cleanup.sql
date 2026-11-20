@@ -1,3 +1,4 @@
+-- ATTENTION: après 05/06, exécuter ce script en session sans auth.uid() peut être refusé; à lancer avant 05 ou via rollback de démo.
 -- ==============================================================================
 -- GymSaaS — Demo Data Cleanup Script
 -- Safely deletes ONLY rows created by demo_data.sql. Leaves all production, seed,
@@ -8,9 +9,7 @@ DO $$
 BEGIN
     -- 1. Delete Demo Visits
     DELETE FROM public.visits
-    WHERE member_id IN (
-        SELECT id FROM public.members WHERE notes = 'DEMO_SEED'
-    );
+    WHERE id BETWEEN '0a000000-0000-0000-0000-000000000001' AND '0a000000-0000-0000-0000-000000000060';
 
     -- 2. Delete Demo Payments
     DELETE FROM public.payments
@@ -20,12 +19,10 @@ BEGIN
 
     -- 3. Delete Demo Subscriptions
     DELETE FROM public.subscriptions
-    WHERE id BETWEEN 'e0000000-0000-0000-0000-000000000001' AND 'e0000000-0000-0000-0000-000000000040'
-       OR member_id IN (SELECT id FROM public.members WHERE notes = 'DEMO_SEED');
+    WHERE id BETWEEN 'e0000000-0000-0000-0000-000000000001' AND 'e0000000-0000-0000-0000-000000000040';
 
     -- 4. Delete Demo Members
     DELETE FROM public.members
-    WHERE notes = 'DEMO_SEED'
-       OR id BETWEEN 'd0000000-0000-0000-0000-000000000001' AND 'd0000000-0000-0000-0000-000000000040';
+    WHERE id BETWEEN 'd0000000-0000-0000-0000-000000000001' AND 'd0000000-0000-0000-0000-000000000040';
 
 END $$;

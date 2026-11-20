@@ -4,6 +4,14 @@ import { NextRequest } from 'next/server';
 const backend = vi.hoisted(() => ({ nonceError: null as null | { code: string }, visitError: null as null | { code: string } }));
 vi.mock('@/lib/supabase/server', () => ({ createServerSupabase: async () => ({
   auth: { getUser: async () => ({ data: { user: { id: 'receptionist' } }, error: null }) },
+  // Le contrat a migré de .from() vers le RPC atomique verify_and_record_visit : le mock expose rpc(),
+  // les erreurs injectées (nonceError / visitError) deviennent des erreurs du RPC. Assertions inchangées.
+  rpc: async (_name: string) => {
+    const error = backend.nonceError ?? backend.visitError;
+    return error ? { data: null, error }
+      : { data: { allowed: true, member: { id: 'member', full_name: 'عضو اختبار', phone: '40000000' },
+          subscription: { end_date: '2099-01-01', plan_name: 'Monthly' }, visit_id: 'visit' }, error: null };
+  },
   from(table: string) {
     let inserting = false;
     const result = () => table === 'qr_nonces' ? { data: null, error: inserting ? backend.nonceError : null }

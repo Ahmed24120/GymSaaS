@@ -1,3 +1,4 @@
+import { resolveGymId } from './gym';
 import { createClient } from '@/lib/supabase/client';
 import { Result, toAppError } from '@/lib/types/auth';
 
@@ -37,11 +38,9 @@ export async function createBranch(params: {
   try {
     const supabase = createClient();
 
-    let gymId = params.gym_id;
-    if (!gymId) {
-      const { data: gym } = await supabase.from('gyms').select('id').limit(1).single();
-      gymId = gym?.id || 'a0000000-0000-0000-0000-000000000001';
-    }
+    const gymRes = await resolveGymId(supabase);
+    if (!gymRes.ok) return { ok: false, error: gymRes.error };
+    const gymId = gymRes.value;
 
     const { data, error } = await supabase
       .from('branches')

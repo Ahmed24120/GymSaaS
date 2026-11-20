@@ -1,0 +1,66 @@
+
+> @gymsaas/web@0.1.0 check
+> tsc --noEmit && next lint && vitest run && next build
+
+✔ No ESLint warnings or errors
+
+ RUN  v5.0.5 /Users/ahmedbahan/.gemini/antigravity/scratch/GymSaaS/apps/web
+
+
+ Test Files  11 passed (11)
+      Tests  68 passed (68)
+   Start at  11:30:08
+   Duration  1.74s (import 58%, tests 19%, worker 14%, transform 8%)
+
+    Isolate  11 workers spawned · ~102ms startup each (spawn + environment, per file)
+             at least ~1.02s faster with isolate: false — reuses workers across files instead of one per file
+
+  ▲ Next.js 14.2.35
+  - Environments: .env.local
+
+   Creating an optimized production build ...
+<w> [webpack.cache.PackFileCacheStrategy] Serializing big strings (114kiB) impacts deserialization performance (consider using Buffer instead and decode when needed)
+<w> [webpack.cache.PackFileCacheStrategy] Serializing big strings (268kiB) impacts deserialization performance (consider using Buffer instead and decode when needed)
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/22) ...
+   Generating static pages (5/22) 
+   Generating static pages (10/22) 
+   Generating static pages (16/22) 
+ ✓ Generating static pages (22/22)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                              Size     First Load JS
+┌ ○ /                                    142 B          87.5 kB
+├ ○ /_not-found                          142 B          87.5 kB
+├ ○ /403                                 178 B          96.2 kB
+├ ƒ /api/qr                              0 B                0 B
+├ ƒ /api/qr/verify                       0 B                0 B
+├ ○ /dashboard                           7.6 kB          191 kB
+├ ○ /dashboard/audit                     5.42 kB         166 kB
+├ ○ /dashboard/branches                  7.57 kB         163 kB
+├ ○ /dashboard/import-excel              146 kB          306 kB
+├ ○ /dashboard/members                   4.18 kB         175 kB
+├ ○ /dashboard/payments                  4.69 kB         177 kB
+├ ○ /dashboard/plans                     7.9 kB          164 kB
+├ ○ /dashboard/reception                 8.6 kB          168 kB
+├ ○ /dashboard/reports                   6.72 kB         167 kB
+├ ○ /dashboard/staff                     6.29 kB         162 kB
+├ ○ /dashboard/visits                    10.1 kB         170 kB
+├ ○ /login                               4.56 kB         160 kB
+├ ○ /manifest.webmanifest                0 B                0 B
+├ ○ /mobile                              11.9 kB         172 kB
+└ ○ /super-admin                         7.37 kB         167 kB
++ First Load JS shared by all            87.3 kB
+  ├ chunks/117-1f248debfc9fd197.js       31.7 kB
+  ├ chunks/fd9d1056-51c851f7a4ad7ea3.js  53.6 kB
+  └ other shared chunks (total)          1.95 kB
+
+
+ƒ Middleware                             85.2 kB
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

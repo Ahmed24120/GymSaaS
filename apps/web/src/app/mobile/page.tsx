@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, Suspense } from 'react';
-import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
   QrCode,
@@ -28,6 +27,8 @@ import {
   VisitRecord,
   getAds,
   AdRecord,
+  getAnnouncements,
+  AnnouncementRecord,
 } from '@/lib/data';
 import { formatDateNouakchott, getDaysRemaining } from '@/lib/services/dateUtils';
 import { QRTokenResponse } from '@/lib/qr/contract';
@@ -42,6 +43,8 @@ function MobileContent() {
   const [member, setMember] = useState<MemberRecord | null>(null);
   const [visits, setVisits] = useState<VisitRecord[]>([]);
   const [ads, setAds] = useState<AdRecord[]>([]);
+  const [announcements, setAnnouncements] = useState<AnnouncementRecord[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Dynamic QR state
@@ -52,11 +55,14 @@ function MobileContent() {
   useEffect(() => {
     const loadMemberData = async () => {
       setLoading(true);
-      const [mRes, vRes, aRes] = await Promise.all([
+      const [mRes, vRes, aRes, anRes] = await Promise.all([
         getMembers(),
         getVisits(),
         getAds(),
+        getAnnouncements(),
       ]);
+      if (!mRes.ok) setLoadError(mRes.error.message);
+      if (anRes.ok) setAnnouncements(anRes.value);
 
       let selected: MemberRecord | null = null;
       if (mRes.ok && mRes.value.length > 0) {
@@ -77,7 +83,8 @@ function MobileContent() {
       }
 
       if (aRes.ok) {
-        setAds(aRes.value.filter((a) => a.status === 'active'));
+        const now = Date.now();
+        setAds(aRes.value.filter((a) => a.status === 'active' && new Date(a.start_date).getTime() <= now && new Date(a.end_date).getTime() >= now));
       }
 
       setLoading(false);
@@ -127,10 +134,25 @@ function MobileContent() {
   const isSubActive =
     sub && sub.status === 'active' && new Date(sub.end_date) > new Date();
 
-  // Streak & Goals calculation (Screen 22)
-  const targetDaysPerWeek = 4;
-  const visitsThisWeek = Math.min(visits.length, 3);
-  const currentStreak = 4; // 4 consecutive weeks of meeting goal
+  // Objectifs : calcul réel depuis les visites (aucune table d'objectifs en Phase 1).
+  // Objectif par défaut fixe : 3 visites/semaine. Semaine = lundi-dimanche (UTC = Africa/Nouakchott).
+  const targetDaysPerWeek = 3;
+  const weekStart = (d: Date) => {
+    const x = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+    const day = (x.getUTCDay() + 6) % 7;
+    return x.getTime() - day * 86400000;
+  };
+  const visitsPerWeek = new Map<number, number>();
+  visits.forEach((v) => {
+    const k = weekStart(new Date(v.entered_at));
+    visitsPerWeek.set(k, (visitsPerWeek.get(k) || 0) + 1);
+  });
+  const thisWeek = weekStart(new Date());
+  const visitsThisWeek = visitsPerWeek.get(thisWeek) || 0;
+  // Série : semaines consécutives atteignant l'objectif, en partant de la semaine en cours (ou de la précédente).
+  let currentStreak = 0;
+  for (let k = visitsThisWeek >= targetDaysPerWeek ? thisWeek : thisWeek - 7 * 86400000;
+       (visitsPerWeek.get(k) || 0) >= targetDaysPerWeek; k -= 7 * 86400000) currentStreak++;
 
   return (
     <div className="min-h-screen bg-[#070a10] text-white flex flex-col items-center justify-center sm:p-4 select-none">
@@ -138,13 +160,7 @@ function MobileContent() {
       <div className="w-full sm:max-w-md sm:h-[860px] bg-[#0c121d] sm:rounded-[36px] sm:border-2 sm:border-surface-border shadow-2xl flex flex-col overflow-hidden relative">
         {/* Top Mobile Bar */}
         <div className="px-5 pt-4 pb-3 flex items-center justify-between border-b border-surface-border/60 bg-[#0e1624]">
-          <Link
-            href="/dashboard"
-            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            <span>الداشبورد</span>
-          </Link>
+          <span aria-hidden className="w-4" />
           <div className="flex items-center gap-1.5 text-xs font-bold text-gym-400">
             <ShieldCheck className="w-4 h-4 text-gym-400" />
             <span>GymSaaS Member</span>
@@ -207,6 +223,11 @@ function MobileContent() {
 
         {/* TAB CONTENTS (Scrollable area) */}
         <div className="flex-1 p-5 overflow-y-auto space-y-4">
+          {!loading && !member && (
+            <div role="status" className="p-4 mb-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs">
+              {loadError ? `تعذر تحميل بياناتك: ${loadError}` : 'لا يوجد حساب عضوية مرتبط بهذا المستخدم. اطلب من الاستقبال ربط حسابك.'}
+            </div>
+          )}
           {/* TAB 1: DYNAMIC QR CODE */}
           {activeTab === 'qr' && (
             <div className="flex flex-col items-center justify-center space-y-4 pt-2">
@@ -269,10 +290,10 @@ function MobileContent() {
               <div className="p-5 rounded-2xl bg-surface-dark border border-surface-border space-y-3">
                 <div className="text-gray-400 text-[11px]">الباقة الحالية</div>
                 <div className="text-xl font-black text-white">
-                  {sub?.plan?.name || 'اشتراك قياسي (1 شهر)'}
+                  {sub?.plan?.name || 'لا يوجد اشتراك'}
                 </div>
                 <div className="text-amber-400 font-mono font-bold text-base">
-                  {sub?.plan?.price_mru ? `${sub.plan.price_mru} MRU` : '1,500 MRU'}
+                  {sub?.plan?.price_mru ? `${sub.plan.price_mru} MRU` : '—'}
                 </div>
               </div>
 
@@ -315,10 +336,10 @@ function MobileContent() {
                     الاستمرارية المتتالية (Streak)
                   </span>
                   <div className="text-2xl font-black text-white mt-1">
-                    {currentStreak} أسابيع متتالية 🔥
+                    {currentStreak > 0 ? `${currentStreak} أسابيع متتالية 🔥` : 'لا توجد سلسلة بعد'}
                   </div>
                   <p className="text-[10px] text-gray-400 mt-0.5">
-                    أنت تحافظ على هدف التمارين الأسبوعي بانتظام!
+                    محسوبة من زياراتك المسجلة. الهدف الافتراضي 3 زيارات أسبوعيًا (غير قابل للتعديل حاليًا).
                   </p>
                 </div>
                 <Trophy className="w-10 h-10 text-amber-400 shrink-0" />
@@ -335,7 +356,7 @@ function MobileContent() {
                 <div className="w-full h-3 bg-surface-card rounded-full overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-gym-500 to-emerald-400 rounded-full transition-all duration-500"
-                    style={{ width: `${Math.round((visitsThisWeek / targetDaysPerWeek) * 100)}%` }}
+                    style={{ width: `${Math.min(100, Math.round((visitsThisWeek / targetDaysPerWeek) * 100))}%` }}
                   />
                 </div>
                 <p className="text-[10px] text-gray-400">
@@ -403,6 +424,20 @@ function MobileContent() {
           {activeTab === 'ads' && (
             <div className="space-y-3 text-xs">
               <div className="text-[11px] text-gray-400 pb-1 border-b border-surface-border/50">
+                إعلانات الصالة
+              </div>
+              {announcements.length === 0 ? (
+                <div className="text-center py-4 text-gray-400 text-xs">لا توجد إعلانات حالياً.</div>
+              ) : (
+                announcements.map((an) => (
+                  <div key={an.id} className="p-4 rounded-2xl bg-surface-dark border border-surface-border space-y-1">
+                    <div className="font-bold text-white">{an.title}</div>
+                    <p className="text-gray-300 leading-relaxed">{an.body}</p>
+                    <div className="text-[10px] text-gray-500">{formatDateNouakchott(an.published_at)}</div>
+                  </div>
+                ))
+              )}
+              <div className="text-[11px] text-gray-400 pb-1 border-b border-surface-border/50 pt-2">
                 عروض وخصومات خاصة بمشتركي GymSaaS
               </div>
 

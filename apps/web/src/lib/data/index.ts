@@ -8,3 +8,4 @@ export * from './staff';
 export * from './audit';
 export * from './dashboard';
 export * from './superAdmin';
+export * from './announcements';
